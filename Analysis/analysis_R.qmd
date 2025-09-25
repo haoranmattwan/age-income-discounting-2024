@@ -1,0 +1,396 @@
+---
+title: "Age-Related Differences in Delay Discounting: Income Matters"
+author: "Haoran (Matt) Wan"
+date: "today"
+format: 
+  html:
+    toc: true
+    code-fold: true
+    self-contained: true
+engine: knitr
+---
+
+## Introduction
+
+This document contains the R code to replicate the analyses from the publication:
+
+> Wan, H., Myerson, J., Green, L., Strube, M. J., & Hale, S. (2024). Age-related differences in delay discounting: Income matters. *Psychology and Aging*. Advance online publication. https://doi.org/10.1037/pag0000818
+
+The analyses test the "buffering hypothesis" by examining the interaction between age and income on delay discounting, using a series of focused Bayesian multilevel regressions.
+
+The data from this study are available at <https://osf.io/um68t/>.
+
+## 1. Setup: Load Packages, Functions, and Process Data
+
+This single chunk now contains all the necessary setup code. It loads the required R packages, defines the custom wrapper functions for the Bayesian models, and then loads and processes the raw data to create the final analysis dataframes.
+
+```{r setup_and_process}
+#| message: false
+#| warning: false
+
+# --- Load Packages ---
+library(readxl)
+library(minpack.lm)
+library(lme4)
+library(glmmTMB)
+library(multcomp)
+library(brms)
+library(tidybayes)
+library(bayestestR)
+library(psych) 
+library(dplyr)
+library(tidyr)
+library(stringr)
+
+# --- Custom Functions ---
+binomial_brm <- function(Formula, Data, File = NULL) {
+  brm(formula = Formula, 
+      family = binomial(), data = Data, 
+      prior = c(prior(cauchy(0, 10), class = Intercept), 
+                prior(cauchy(0, 2.5), class = b),
+                prior(cauchy(0, 2.5), class = sd)),
+      iter = 4000, refresh = 0, silent = 2, warmup = 2000, chains = 4, cores = 4, 
+      backend = "cmdstanr", control = list(adapt_delta=0.95, max_treedepth=10), 
+      file = File)
+}
+beta_brm <- function(Formula, Data, File = NULL) {
+  brm(formula = Formula, 
+      family = beta_family(), data = Data, 
+      prior = c(prior(normal(0, 100^100), class = Intercept), 
+                prior(cauchy(0, 2.5), class = b),
+                prior(cauchy(0, 2.5), class = sd)),
+      iter = 4000, refresh = 0, silent = 2, warmup = 2000, chains = 4, cores = 4, 
+      backend = "cmdstanr", control = list(adapt_delta=0.95, max_treedepth=10), 
+      file = File)
+}
+brm_summary <- function(brm_model, rownames = NULL) {
+  suppressWarnings(trans_brms <- brm_model |>
+                     gather_draws(`b_.*`, regex = T) |> select(c(.variable, .value)) |>
+                     group_by(.variable) |> 
+                     mutate(pd = ecdf(.value)(0),
+                            pd = ifelse(pd>=.5, pd, 1-pd),
+                            signif = ifelse(pd >= .975, "*"," ")) |> 
+                     group_by(.variable, pd, signif) |>
+                     median_hdi() |>
+                     select(c(.variable, .value, .lower, .upper, pd, signif)) |>
+                     mutate(.variable = factor(.variable, levels=as.data.frame(p_direction(brm_model))$Parameter)) |>
+                     arrange(.variable) |>
+                     mutate_at(c(".variable"), funs(str_replace(., "b_", ""))) |>
+                     mutate_at(c(".variable"), funs(str_replace(., "_c", ""))) |>
+                     mutate(across(.cols = -c(.variable,signif), ~round(.,3))) |>
+                     mutate(across(.cols = -c(.variable,signif), ~sprintf("%.3f", round(.,3)))) |>
+                     `colnames<-`(c("rowname","b","95% CI_l","95% CI_u","pd","signif")))
+  if (!is.null(rownames)) {
+    trans_brms <- trans_brms |> tibble::column_to_rownames() |> `rownames<-`(rownames)
+  }
+  return(as.data.frame(trans_brms))
+}
+
+# --- Data Processing ---
+# Function to calculate Area under the Curve
+auc_func <- function(x, y) {
+  sum(diff(x) * (y[-1] + y[-length(y)])) / 2
+}
+
+# Load raw data
+dat_adj_amt_raw <- read_excel("Manuscript/Resubmission2/Analysis/Data_AgeIncome.xlsx", sheet = 2)
+dat_mcq_raw <- read_excel("Manuscript/Resubmission2/Analysis/Data_AgeIncome.xlsx", sheet = 1) |>
+  mutate(
+    # Assign the value of k for each question on the Kirby's MCQ (1999)
+    k      = case_when(Q_ID == 1 ~ 0.00016, Q_ID == 2 ~ 0.00600, Q_ID == 3 ~ 0.00600,
+                       Q_ID == 4 ~ 0.25000, Q_ID == 5 ~ 0.04100, Q_ID == 6 ~ 0.00040,
+                       Q_ID == 7 ~ 0.10000, Q_ID == 8 ~ 0.10000, Q_ID == 9 ~ 0.00016,
+                       Q_ID == 10 ~ 0.00600, Q_ID == 11 ~ 0.25000, Q_ID == 12 ~ 0.00100,
+                       Q_ID == 13 ~ 0.00016, Q_ID == 14 ~ 0.04100, Q_ID == 15 ~ 0.00250,
+                       Q_ID == 16 ~ 0.00250, Q_ID == 17 ~ 0.00040, Q_ID == 18 ~ 0.01600,
+                       Q_ID == 19 ~ 0.10000, Q_ID == 20 ~ 0.00040, Q_ID == 21 ~ 0.01600,
+                       Q_ID == 22 ~ 0.00250, Q_ID == 23 ~ 0.04100, Q_ID == 24 ~ 0.00100,
+                       Q_ID == 25 ~ 0.01600, Q_ID == 26 ~ 0.00100, Q_ID == 27 ~ 0.25000),
+    # Assign the amount of the delayed reward for each question
+    Amount = case_when(Q_ID == 1 ~ "$50-$60", Q_ID == 2 ~ "$75-$85", Q_ID == 3 ~ "$25-$35",
+                       Q_ID == 4 ~ "$75-$85", Q_ID == 5 ~ "$25-$35", Q_ID == 6 ~ "$50-$60",
+                       Q_ID == 7 ~ "$25-$35", Q_ID == 8 ~ "$50-$60", Q_ID == 9 ~ "$75-$85",
+                       Q_ID == 10 ~ "$50-$60", Q_ID == 11 ~ "$25-$35", Q_ID == 12 ~ "$75-$85",
+                       Q_ID == 13 ~ "$25-$35", Q_ID == 14 ~ "$50-$60", Q_ID == 15 ~ "$75-$85",
+                       Q_ID == 16 ~ "$50-$60", Q_ID == 17 ~ "$75-$85", Q_ID == 18 ~ "$25-$35",
+                       Q_ID == 19 ~ "$75-$85", Q_ID == 20 ~ "$25-$35", Q_ID == 21 ~ "$50-$60",
+                       Q_ID == 22 ~ "$25-$35", Q_ID == 23 ~ "$75-$85", Q_ID == 24 ~ "$50-$60",
+                       Q_ID == 25 ~ "$75-$85", Q_ID == 26 ~ "$25-$35", Q_ID == 27 ~ "$50-$60"),
+    Amount =  factor(Amount, level = c("$75-$85","$50-$60","$25-$35")))
+
+# --- Create Group-Level Data Frames ---
+MCQ_grp_df <- dat_mcq_raw |>
+  mutate(
+    log_k = log(k),
+    Group = factor(Group, levels = c(1,3,2,4), labels = c("Younger, Lower-Income", "Older, Lower-Income", "Younger, Higher-Income", "Older, Higher-Income"))
+  ) |>
+  group_by(Group, Amount, log_k, k) |>
+  summarise(Prop = mean(Choice), .groups = 'drop')
+
+AdjAmt_grp_df <- dat_adj_amt_raw |>
+  mutate(
+    Group = factor(Group, levels = c(1,3,2,4), labels = c("Younger, Lower-Income", "Older, Lower-Income", "Younger, Higher-Income", "Older, Higher-Income")),
+    Amount = factor(Amount, levels = c("500", "80", "30"), labels = c("$500", "$80", "$30"))
+  ) |>
+  group_by(Group, Amount, Delay) |>
+  summarise(Mean_RSV = mean(RSV), .groups = 'drop')
+
+# Process Adj-Amt Data
+adj_amt_processed <- dat_adj_amt_raw |>
+  filter(Delay != 730) |>
+  group_by(ID, Amount) |>
+  summarise(
+    AuC = auc_func(Delay / max(Delay), RSV),
+    .groups = 'drop'
+  ) |>
+  mutate(procedure = "aa")
+
+# Process MCQ Data
+mcq_processed <- dat_mcq_raw |>
+  group_by(ID, Amount) |>
+  summarise(
+    Num_Choice = sum(Choice),
+    .groups = 'drop'
+  ) |>
+  mutate(procedure = "mcq")
+
+# Combine and create final analysis dataframes
+demographics <- distinct(dat_adj_amt_raw, ID, Group, Age, Gender, Education, HADS) |>
+  mutate(
+    Age_grp = ifelse(Group %in% c(1, 2), 0, 1), # 0=Younger, 1=Older
+    Income_grp = ifelse(Group %in% c(1, 3), 0, 1), # 0=Lower, 1=Higher
+    Education_grp = ifelse(Education <= 3, 0, 1), # 0=Below College, 1=College+
+    HADS = ifelse(HADS == "NA", NA, as.numeric(HADS))
+  )
+
+MCQ_ID_df <- mcq_processed |> left_join(demographics, by = "ID")
+AdjAmt_ID_df <- adj_amt_processed |> left_join(demographics, by = "ID")
+
+# --- Create Model-Specific Dataframes with Centered Variables ---
+MCQ_mod1_df <- MCQ_ID_df |> filter(Amount != "$50-$60") |> mutate(Age_grp_c = Age_grp - mean(Age_grp), Income_grp_c = Income_grp - mean(Income_grp))
+AdjAmt_mod1_df <- AdjAmt_ID_df |> filter(Amount != 500) |> mutate(Age_grp_c = Age_grp - mean(Age_grp), Income_grp_c = Income_grp - mean(Income_grp))
+
+MCQ_mod2_df <- MCQ_ID_df |> filter(Amount != "$50-$60", !is.na(Education_grp)) |> mutate(across(c(Age_grp, Income_grp, Gender, Education_grp), ~ . - mean(., na.rm=TRUE), .names = "{.col}_c"))
+AdjAmt_mod2_df <- AdjAmt_ID_df |> filter(Amount != 500, !is.na(Education_grp)) |> mutate(across(c(Age_grp, Income_grp, Gender, Education_grp), ~ . - mean(., na.rm=TRUE), .names = "{.col}_c"))
+
+MCQ_mod3_df <- MCQ_ID_df |> filter(Amount != "$50-$60", !is.na(Education_grp), !is.na(HADS)) |> mutate(across(c(Age_grp, Income_grp, Gender, Education_grp), ~ . - mean(., na.rm=TRUE), .names = "{.col}_c"), HADS_c = (HADS - mean(HADS, na.rm=TRUE)) / (2*sd(HADS, na.rm=TRUE)))
+AdjAmt_mod3_df <- AdjAmt_ID_df |> filter(Amount != 500, !is.na(Education_grp), !is.na(HADS)) |> mutate(across(c(Age_grp, Income_grp, Gender, Education_grp), ~ . - mean(., na.rm=TRUE), .names = "{.col}_c"), HADS_c = (HADS - mean(HADS, na.rm=TRUE)) / (2*sd(HADS, na.rm=TRUE)))
+
+# --- Create the Composite z-Score DataFrame ---
+z_df <- bind_cols(
+    select(arrange(ungroup(subset(MCQ_ID_df, Amount != "$50-$60")), ID, desc(Amount)), 
+           c(ID, Age_grp, Income_grp, Age, Num_Choice)), 
+    select(ungroup(subset(AdjAmt_ID_df, Amount != 500)), c(AuC))
+  ) |>
+  mutate(
+    MCQ_z = (Num_Choice - mean(Num_Choice)) / sd(Num_Choice),
+    AdjAmt_z = (AuC - mean(AuC)) / sd(AuC)
+  ) |>
+  select(-c(Num_Choice, AuC)) |>
+  pivot_longer(names_to = "Procedure", values_to = "z_score", cols = c(MCQ_z, AdjAmt_z)) |>
+  group_by(ID) |> 
+  select(-Procedure) |> 
+  summarise(across(everything(), mean)) |> # Calculate mean z-score for each participant
+  mutate(
+    Age_grp_c = Age_grp - mean(Age_grp),
+    Age_c = (Age - mean(Age)) / sd(Age),
+    Income_grp_c = Income_grp - mean(Income_grp)
+  )
+```
+
+---
+
+## 2. Data Quality & Reliability Checks
+
+This section replicates the initial analyses from the paper that establish the quality of the discounting data.
+
+```{r quality_checks}
+#| tbl-cap: "Within-Procedure Reliability Correlations"
+
+# --- MCQ: Group-Level Logistic Growth Model Fit ---
+cat("--- MCQ: R-squared for Group-Level Logistic Growth Fits ---\n")
+MCQ_grp_df |>
+  group_by(Group, Amount) |>
+  do(
+     R2 = modelr::rsquare(nlsLM(Prop ~ 1 / (1 + exp( - (log_k - a) * (r) )), 
+                        data = ., start = list(a = -4, r = 1)), data =.)
+  ) |>
+  as.data.frame() |> 
+  pivot_wider(names_from = Group, values_from = R2) |>
+  as.data.frame() |> print(digits = 3)
+
+# --- Adj-Amt: Group-Level Hyperboloid Model Fit ---
+cat("\n--- Adj-Amt: R-squared for Group-Level Hyperboloid Fits ---\n")
+AdjAmt_grp_df |>
+  group_by(Group, Amount) |>
+  do(
+     R2 = modelr::rsquare(nlsLM(Mean_RSV ~ 1 / (1 + (k) * Delay)^(s), 
+                        data = ., start = list(k = .1, s = 1)), data =.)
+  ) |>
+  as.data.frame() |>
+  pivot_wider(names_from = Group, values_from = R2) |>
+  as.data.frame() |> print(digits = 3)
+
+# --- Within-Procedure Reliability (Correlations) ---
+cat("\n--- MCQ: Within-Procedure Correlations (Number of Delayed Choices) ---\n")
+MCQ_ID_df |> 
+  pivot_wider(names_from = Amount, values_from = Num_Choice) |>
+  select(`$25-$35`, `$50-$60`, `$75-$85`) |>
+  cor() |>
+  print(digits = 2)
+
+cat("\n--- Adj-Amt: Within-Procedure Correlations (AuC) ---\n")
+AdjAmt_ID_df |> 
+  pivot_wider(names_from = Amount, values_from = AuC) |>
+  select(`30`,`80`,`500`) |>
+  rename("$30" = "30", "$80" = "80", "$500" = "500") |>
+  cor() |>
+  print(digits = 2)
+```
+
+---
+
+## 3. Hypothesis Testing: Effects of Age on Discounting
+
+This section replicates the focused contrasts that test the buffering hypothesis by examining the effect of age at each level of income. The results correspond to **Table 2** in the publication.
+
+```{r age_effects}
+#| cache: true
+#| results: 'hold'
+#| tbl-cap: "Table 2 Replication: Effect of Age on Discounting"
+
+# --- Model 1: Discounting = fn(Age) ---
+cat("--- Model 1: Age Effects ---\n")
+# Lower Income
+MCQ_LowInc_mod1 <- binomial_brm(bf(Num_Choice | trials(9) ~ Age_grp_c + (1|ID)), subset(MCQ_mod1_df, Income_grp == 0))
+AdjAmt_LowInc_mod1 <- beta_brm(bf(AuC ~ Age_grp_c + (1|ID)), subset(AdjAmt_mod1_df, Income_grp == 0))
+# Higher Income
+MCQ_HighInc_mod1 <- binomial_brm(bf(Num_Choice | trials(9) ~ Age_grp_c + (1|ID)), subset(MCQ_mod1_df, Income_grp == 1))
+AdjAmt_HighInc_mod1 <- beta_brm(bf(AuC ~ Age_grp_c + (1|ID)), subset(AdjAmt_mod1_df, Income_grp == 1))
+
+print(brm_summary(MCQ_LowInc_mod1, c("Intercept", "Age")))
+print(brm_summary(AdjAmt_LowInc_mod1, c("Intercept", "Age")))
+print(brm_summary(MCQ_HighInc_mod1, c("Intercept", "Age")))
+print(brm_summary(AdjAmt_HighInc_mod1, c("Intercept", "Age")))
+
+
+# --- Model 2: Discounting = fn(Age, Demographics) ---
+cat("\n--- Model 2: Age Effects Controlling for Demographics ---\n")
+# Lower Income
+MCQ_LowInc_mod2 <- binomial_brm(bf(Num_Choice | trials(9) ~ Age_grp_c + Education_grp_c + Gender_c + (1|ID)), subset(MCQ_mod2_df, Income_grp == 0))
+AdjAmt_LowInc_mod2 <- beta_brm(bf(AuC ~ Age_grp_c + Education_grp_c + Gender_c + (1|ID)), subset(AdjAmt_mod2_df, Income_grp == 0))
+# Higher Income
+MCQ_HighInc_mod2 <- binomial_brm(bf(Num_Choice | trials(9) ~ Age_grp_c + Education_grp_c + Gender_c + (1|ID)), subset(MCQ_mod2_df, Income_grp == 1))
+AdjAmt_HighInc_mod2 <- beta_brm(bf(AuC ~ Age_grp_c + Education_grp_c + Gender_c + (1|ID)), subset(AdjAmt_mod2_df, Income_grp == 1))
+
+print(brm_summary(MCQ_LowInc_mod2, c("Intercept", "Age", "Education", "Gender")))
+print(brm_summary(AdjAmt_LowInc_mod2, c("Intercept", "Age", "Education", "Gender")))
+print(brm_summary(MCQ_HighInc_mod2, c("Intercept", "Age", "Education", "Gender")))
+print(brm_summary(AdjAmt_HighInc_mod2, c("Intercept", "Age", "Education", "Gender")))
+
+
+# --- Model 3: Discounting = fn(Age, Demographics, Distress) ---
+cat("\n--- Model 3: Age Effects Controlling for Demographics and Distress ---\n")
+# Lower Income
+MCQ_LowInc_mod3 <- binomial_brm(bf(Num_Choice | trials(9) ~ Age_grp_c + Education_grp_c + Gender_c + HADS_c + (1|ID)), subset(MCQ_mod3_df, Income_grp == 0))
+AdjAmt_LowInc_mod3 <- beta_brm(bf(AuC ~ Age_grp_c + Education_grp_c + Gender_c + HADS_c + (1|ID)), subset(AdjAmt_mod3_df, Income_grp == 0))
+# Higher Income
+MCQ_HighInc_mod3 <- binomial_brm(bf(Num_Choice | trials(9) ~ Age_grp_c + Education_grp_c + Gender_c + HADS_c + (1|ID)), subset(MCQ_mod3_df, Income_grp == 1))
+AdjAmt_HighInc_mod3 <- beta_brm(bf(AuC ~ Age_grp_c + Education_grp_c + Gender_c + HADS_c + (1|ID)), subset(AdjAmt_mod3_df, Income_grp == 1))
+
+print(brm_summary(MCQ_LowInc_mod3, c("Intercept", "Age", "Education", "Gender", "Distress")))
+print(brm_summary(AdjAmt_LowInc_mod3, c("Intercept", "Age", "Education", "Gender", "Distress")))
+print(brm_summary(MCQ_HighInc_mod3, c("Intercept", "Age", "Education", "Gender", "Distress")))
+print(brm_summary(AdjAmt_HighInc_mod3, c("Intercept", "Age", "Education", "Gender", "Distress")))
+```
+
+---
+
+## 4. Hypothesis Testing: Effects of Income on Discounting
+
+This section replicates the complementary focused contrasts that test the effect of income at each level of age. The results correspond to **Table 3** in the publication.
+
+```{r income_effects}
+#| cache: true
+#| results: 'hold'
+
+#| cache: true
+#| results: 'hold'
+#| tbl-cap: "Table 3 Replication: Effect of Income on Discounting"
+
+# --- Model 1: Discounting = fn(Income) ---
+cat("--- Model 1: Income Effects ---\n")
+# Younger
+MCQ_Young_mod1 <- binomial_brm(bf(Num_Choice | trials(9) ~ Income_grp_c + (1|ID)), subset(MCQ_mod1_df, Age_grp == 0))
+AdjAmt_Young_mod1 <- beta_brm(bf(AuC ~ Income_grp_c + (1|ID)), subset(AdjAmt_mod1_df, Age_grp == 0))
+# Older
+MCQ_Old_mod1 <- binomial_brm(bf(Num_Choice | trials(9) ~ Income_grp_c + (1|ID)), subset(MCQ_mod1_df, Age_grp == 1))
+AdjAmt_Old_mod1 <- beta_brm(bf(AuC ~ Income_grp_c + (1|ID)), subset(AdjAmt_mod1_df, Age_grp == 1))
+
+print(brm_summary(MCQ_Young_mod1, c("Intercept", "Income")))
+print(brm_summary(AdjAmt_Young_mod1, c("Intercept", "Income")))
+print(brm_summary(MCQ_Old_mod1, c("Intercept", "Income")))
+print(brm_summary(AdjAmt_Old_mod1, c("Intercept", "Income")))
+
+# --- Model 2: Discounting = fn(Income, Demographics) ---
+cat("\n--- Model 2: Income Effects Controlling for Demographics ---\n")
+# Younger
+MCQ_Young_mod2 <- binomial_brm(bf(Num_Choice | trials(9) ~ Income_grp_c + Education_grp_c + Gender_c + (1|ID)), subset(MCQ_mod2_df, Age_grp == 0))
+AdjAmt_Young_mod2 <- beta_brm(bf(AuC ~ Income_grp_c + Education_grp_c + Gender_c + (1|ID)), subset(AdjAmt_mod2_df, Age_grp == 0))
+# Older
+MCQ_Old_mod2 <- binomial_brm(bf(Num_Choice | trials(9) ~ Income_grp_c + Education_grp_c + Gender_c + (1|ID)), subset(MCQ_mod2_df, Age_grp == 1))
+AdjAmt_Old_mod2 <- beta_brm(bf(AuC ~ Income_grp_c + Education_grp_c + Gender_c + (1|ID)), subset(AdjAmt_mod2_df, Age_grp == 1))
+
+print(brm_summary(MCQ_Young_mod2, c("Intercept", "Income", "Education", "Gender")))
+print(brm_summary(AdjAmt_Young_mod2, c("Intercept", "Income", "Education", "Gender")))
+print(brm_summary(MCQ_Old_mod2, c("Intercept", "Income", "Education", "Gender")))
+print(brm_summary(AdjAmt_Old_mod2, c("Intercept", "Income", "Education", "Gender")))
+```
+
+---
+
+## 5. Association with Composite Discounting Measure
+
+The following analyses use the composite discounting measure (`z_df`) to evaluate the correlations between Age Group and z-scores for each Income Group, and between Income Group and z-scores for each Age Group.
+
+```{r zscore_correlations}
+#| tbl-cap: "Correlations with Composite z-Score"
+
+# Correlation between Age Group and z-score for each Income Group
+cat("--- Age Effect on z-score within each Income Group ---\n")
+cor.test(subset(z_df, Income_grp == 0)$z_score, subset(z_df, Income_grp == 0)$Age_grp) # Lower Income
+cor.test(subset(z_df, Income_grp == 1)$z_score, subset(z_df, Income_grp == 1)$Age_grp) # Higher Income
+
+# Correlation between Income Group and z-score for each Age Group
+cat("\n--- Income Effect on z-score within each Age Group ---\n")
+cor.test(subset(z_df, Age_grp == 0)$z_score, subset(z_df, Age_grp == 0)$Income_grp) # Younger
+cor.test(subset(z_df, Age_grp == 1)$z_score, subset(z_df, Age_grp == 1)$Income_grp) # Older
+```
+
+## 6. The Magnitude of the Age Difference
+
+These final analyses use the composite discounting measure to examine the magnitude of the effects of Age and Income on discounting.
+
+```{r zscore_lm}
+#| tbl-cap: "Linear Models on Composite z-Score"
+
+# Mean z_score for each group
+cat("--- Mean Composite z-Score by Group ---\n")
+z_df |>
+  group_by(Age_grp, Income_grp) |>
+  summarise(mean_zscore = mean(z_score), .groups = 'drop') |>
+  mutate(
+    Age_grp = ifelse(Age_grp == 0, "Younger", "Older"),
+    Income_grp = ifelse(Income_grp == 0, "Lower-Income", "Higher-Income")
+  ) |>
+  print()
+
+# z-score = fn[Age, Income, Age x Income]
+cat("\n--- Full Model: z-score ~ Age * Income ---\n")
+summary(lm(z_score ~ (Age_grp_c + Income_grp_c)^2, data = z_df))
+
+# Age effect in each of the two income groups using continuous age
+cat("\n--- Age Effect on z-score within each Income Group (Continuous Age) ---\n")
+summary(lm(z_score ~ Age, data = subset(z_df, Income_grp == 0))) # Lower Income
+summary(lm(z_score ~ Age, data = subset(z_df, Income_grp == 1))) # Higher Income
+```
