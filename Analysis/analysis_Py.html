@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.7.32">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+
+<title>Age-Related Differences in Delay Discounting: Income Matters</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="analysis_Py_files/libs/clipboard/clipboard.min.js"></script>
+<script src="analysis_Py_files/libs/quarto-html/quarto.js" type="module"></script>
+<script src="analysis_Py_files/libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="analysis_Py_files/libs/quarto-html/popper.min.js"></script>
+<script src="analysis_Py_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="analysis_Py_files/libs/quarto-html/anchor.min.js"></script>
+<link href="analysis_Py_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="analysis_Py_files/libs/quarto-html/quarto-syntax-highlighting-37eea08aefeeee20ff55810ff984fec1.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="analysis_Py_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="analysis_Py_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="analysis_Py_files/libs/bootstrap/bootstrap-bb462d781dde1847d9e3ccf7736099dd.min.css" rel="stylesheet" append-hash="true" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="fullcontent quarto-light">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Age-Related Differences in Delay Discounting: Income Matters</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<p>This notebook replicates the analyses from the publication:</p>
+<blockquote class="blockquote">
+<p>Wan, H., Myerson, J., Green, L., Strube, M. J., &amp; Hale, S. (2024). Age-related differences in delay discounting: Income matters. <em>Psychology and Aging</em>. Advance online publication. https://doi.org/10.1037/pag0000818</p>
+</blockquote>
+<p>The original analyses were conducted in R and have been translated into a Python workflow using <code>pandas</code>, <code>scipy</code>, <code>statsmodels</code>, and <code>pymc</code>. The analyses test the “buffering hypothesis” by examining the interaction between age and income on delay discounting, using a series of focused Bayesian multilevel regressions.</p>
+<p>The data from this study are available at <a href="https://osf.io/um68t/" class="uri">https://osf.io/um68t/</a>.</p>
+<div id="662f0c47" class="cell">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Install necessary packages</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> sys</span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="op">!</span>{sys.executable} <span class="op">-</span>m pip install pandas numpy openpyxl scipy statsmodels pymc arviz scikit<span class="op">-</span>learn</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div id="3d009214" class="cell">
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co"># --- 1. Setup: Load Packages, Functions, and Process Data ---</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="co"># --- Load Packages ---</span></span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> numpy <span class="im">as</span> np</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> warnings</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scipy.optimize <span class="im">import</span> curve_fit</span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> sklearn.metrics <span class="im">import</span> r2_score</span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> statsmodels.api <span class="im">as</span> sm</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> statsmodels.formula.api <span class="im">as</span> smf</span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="im">from</span> scipy.stats <span class="im">import</span> pearsonr</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pymc <span class="im">as</span> pm</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> arviz <span class="im">as</span> az</span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="co"># Suppress warnings for cleaner output</span></span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>warnings.filterwarnings(<span class="st">'ignore'</span>)</span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>pd.options.display.float_format <span class="op">=</span> <span class="st">'</span><span class="sc">{:.3f}</span><span class="st">'</span>.<span class="bu">format</span></span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a><span class="co"># --- Custom Functions ---</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> binomial_pymc(formula, data, progressbar<span class="op">=</span><span class="va">False</span>):</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Wrapper to fit a Bayesian binomial regression using PyMC."""</span></span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>    outcome, predictor <span class="op">=</span> [v.strip() <span class="cf">for</span> v <span class="kw">in</span> formula.split(<span class="st">'~'</span>)]</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> pm.Model() <span class="im">as</span> model:</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Define priors based on the original brms setup</span></span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>        intercept <span class="op">=</span> pm.Normal(<span class="st">"Intercept"</span>, mu<span class="op">=</span><span class="dv">0</span>, sigma<span class="op">=</span><span class="dv">10</span>)</span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>        slope <span class="op">=</span> pm.Normal(predictor, mu<span class="op">=</span><span class="dv">0</span>, sigma<span class="op">=</span><span class="fl">2.5</span>)</span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Define the linear model on the logit scale</span></span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>        eta <span class="op">=</span> intercept <span class="op">+</span> slope <span class="op">*</span> data[predictor]</span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>        p <span class="op">=</span> pm.math.invlogit(eta)</span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Define the likelihood</span></span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a>        pm.Binomial(</span>
+<span id="cb2-35"><a href="#cb2-35" aria-hidden="true" tabindex="-1"></a>            outcome,</span>
+<span id="cb2-36"><a href="#cb2-36" aria-hidden="true" tabindex="-1"></a>            n<span class="op">=</span>data[<span class="st">'trials'</span>].values,</span>
+<span id="cb2-37"><a href="#cb2-37" aria-hidden="true" tabindex="-1"></a>            p<span class="op">=</span>p,</span>
+<span id="cb2-38"><a href="#cb2-38" aria-hidden="true" tabindex="-1"></a>            observed<span class="op">=</span>data[outcome].values</span>
+<span id="cb2-39"><a href="#cb2-39" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb2-40"><a href="#cb2-40" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb2-41"><a href="#cb2-41" aria-hidden="true" tabindex="-1"></a>        idata <span class="op">=</span> pm.sample(draws<span class="op">=</span><span class="dv">2000</span>, tune<span class="op">=</span><span class="dv">2000</span>, chains<span class="op">=</span><span class="dv">4</span>, cores<span class="op">=</span><span class="dv">4</span>,</span>
+<span id="cb2-42"><a href="#cb2-42" aria-hidden="true" tabindex="-1"></a>                          target_accept<span class="op">=</span><span class="fl">0.95</span>, progressbar<span class="op">=</span>progressbar)</span>
+<span id="cb2-43"><a href="#cb2-43" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> idata</span>
+<span id="cb2-44"><a href="#cb2-44" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-45"><a href="#cb2-45" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> beta_pymc(formula, data, progressbar<span class="op">=</span><span class="va">False</span>):</span>
+<span id="cb2-46"><a href="#cb2-46" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Wrapper to fit a Bayesian beta regression using PyMC."""</span></span>
+<span id="cb2-47"><a href="#cb2-47" aria-hidden="true" tabindex="-1"></a>    outcome, predictor <span class="op">=</span> [v.strip() <span class="cf">for</span> v <span class="kw">in</span> formula.split(<span class="st">'~'</span>)]</span>
+<span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a>    <span class="cf">with</span> pm.Model() <span class="im">as</span> model:</span>
+<span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Define priors</span></span>
+<span id="cb2-51"><a href="#cb2-51" aria-hidden="true" tabindex="-1"></a>        intercept <span class="op">=</span> pm.Normal(<span class="st">"Intercept"</span>, mu<span class="op">=</span><span class="dv">0</span>, sigma<span class="op">=</span><span class="dv">10</span>)</span>
+<span id="cb2-52"><a href="#cb2-52" aria-hidden="true" tabindex="-1"></a>        slope <span class="op">=</span> pm.Normal(predictor, mu<span class="op">=</span><span class="dv">0</span>, sigma<span class="op">=</span><span class="fl">2.5</span>)</span>
+<span id="cb2-53"><a href="#cb2-53" aria-hidden="true" tabindex="-1"></a>        nu <span class="op">=</span> pm.HalfCauchy(<span class="st">"nu"</span>, beta<span class="op">=</span><span class="dv">10</span>) </span>
+<span id="cb2-54"><a href="#cb2-54" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-55"><a href="#cb2-55" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Define the linear model for the mean (mu), using a logit link</span></span>
+<span id="cb2-56"><a href="#cb2-56" aria-hidden="true" tabindex="-1"></a>        eta <span class="op">=</span> intercept <span class="op">+</span> slope <span class="op">*</span> data[predictor]</span>
+<span id="cb2-57"><a href="#cb2-57" aria-hidden="true" tabindex="-1"></a>        mu <span class="op">=</span> pm.math.invlogit(eta)</span>
+<span id="cb2-58"><a href="#cb2-58" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-59"><a href="#cb2-59" aria-hidden="true" tabindex="-1"></a>        <span class="co"># Define the likelihood with the corrected parameter nu</span></span>
+<span id="cb2-60"><a href="#cb2-60" aria-hidden="true" tabindex="-1"></a>        pm.Beta(</span>
+<span id="cb2-61"><a href="#cb2-61" aria-hidden="true" tabindex="-1"></a>            outcome,</span>
+<span id="cb2-62"><a href="#cb2-62" aria-hidden="true" tabindex="-1"></a>            mu<span class="op">=</span>mu,</span>
+<span id="cb2-63"><a href="#cb2-63" aria-hidden="true" tabindex="-1"></a>            nu<span class="op">=</span>nu, </span>
+<span id="cb2-64"><a href="#cb2-64" aria-hidden="true" tabindex="-1"></a>            observed<span class="op">=</span>data[outcome].values</span>
+<span id="cb2-65"><a href="#cb2-65" aria-hidden="true" tabindex="-1"></a>        )</span>
+<span id="cb2-66"><a href="#cb2-66" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-67"><a href="#cb2-67" aria-hidden="true" tabindex="-1"></a>        idata <span class="op">=</span> pm.sample(draws<span class="op">=</span><span class="dv">2000</span>, tune<span class="op">=</span><span class="dv">2000</span>, chains<span class="op">=</span><span class="dv">4</span>, cores<span class="op">=</span><span class="dv">4</span>,</span>
+<span id="cb2-68"><a href="#cb2-68" aria-hidden="true" tabindex="-1"></a>                          target_accept<span class="op">=</span><span class="fl">0.95</span>, progressbar<span class="op">=</span>progressbar)</span>
+<span id="cb2-69"><a href="#cb2-69" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> idata</span>
+<span id="cb2-70"><a href="#cb2-70" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-71"><a href="#cb2-71" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> pymc_summary(idata, var_names<span class="op">=</span><span class="va">None</span>):</span>
+<span id="cb2-72"><a href="#cb2-72" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Custom function to format PyMC model summary similar to the R version."""</span></span>
+<span id="cb2-73"><a href="#cb2-73" aria-hidden="true" tabindex="-1"></a>    summary_df <span class="op">=</span> az.summary(idata, hdi_prob<span class="op">=</span><span class="fl">0.95</span>, kind<span class="op">=</span><span class="st">'stats'</span>, var_names<span class="op">=</span>var_names)</span>
+<span id="cb2-74"><a href="#cb2-74" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-75"><a href="#cb2-75" aria-hidden="true" tabindex="-1"></a>    <span class="co"># Calculate Probability of Direction (pd)</span></span>
+<span id="cb2-76"><a href="#cb2-76" aria-hidden="true" tabindex="-1"></a>    posterior <span class="op">=</span> az.extract(idata, var_names<span class="op">=</span>var_names)</span>
+<span id="cb2-77"><a href="#cb2-77" aria-hidden="true" tabindex="-1"></a>    pd_values <span class="op">=</span> {}</span>
+<span id="cb2-78"><a href="#cb2-78" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> var <span class="kw">in</span> posterior.data_vars:</span>
+<span id="cb2-79"><a href="#cb2-79" aria-hidden="true" tabindex="-1"></a>        samples <span class="op">=</span> posterior[var].values.flatten()</span>
+<span id="cb2-80"><a href="#cb2-80" aria-hidden="true" tabindex="-1"></a>        pd <span class="op">=</span> np.mean(samples <span class="op">&gt;</span> <span class="dv">0</span>)</span>
+<span id="cb2-81"><a href="#cb2-81" aria-hidden="true" tabindex="-1"></a>        pd <span class="op">=</span> <span class="bu">max</span>(pd, <span class="dv">1</span> <span class="op">-</span> pd)</span>
+<span id="cb2-82"><a href="#cb2-82" aria-hidden="true" tabindex="-1"></a>        pd_values[var] <span class="op">=</span> pd</span>
+<span id="cb2-83"><a href="#cb2-83" aria-hidden="true" tabindex="-1"></a>        </span>
+<span id="cb2-84"><a href="#cb2-84" aria-hidden="true" tabindex="-1"></a>    summary_df[<span class="st">'pd'</span>] <span class="op">=</span> summary_df.index.<span class="bu">map</span>(pd_values)</span>
+<span id="cb2-85"><a href="#cb2-85" aria-hidden="true" tabindex="-1"></a>    summary_df[<span class="st">'signif'</span>] <span class="op">=</span> np.where(summary_df[<span class="st">'pd'</span>] <span class="op">&gt;=</span> <span class="fl">0.975</span>, <span class="st">'*'</span>, <span class="st">' '</span>)</span>
+<span id="cb2-86"><a href="#cb2-86" aria-hidden="true" tabindex="-1"></a>    summary_df <span class="op">=</span> summary_df[[<span class="st">'mean'</span>, <span class="st">'hdi_2.5%'</span>, <span class="st">'hdi_97.5%'</span>, <span class="st">'pd'</span>, <span class="st">'signif'</span>]]</span>
+<span id="cb2-87"><a href="#cb2-87" aria-hidden="true" tabindex="-1"></a>    summary_df.columns <span class="op">=</span> [<span class="st">'b'</span>, <span class="st">'95% CI_l'</span>, <span class="st">'95% CI_u'</span>, <span class="st">'pd'</span>, <span class="st">'signif'</span>]</span>
+<span id="cb2-88"><a href="#cb2-88" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-89"><a href="#cb2-89" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> summary_df.<span class="bu">apply</span>(<span class="kw">lambda</span> x: x.<span class="bu">map</span>(<span class="st">'</span><span class="sc">{:.3f}</span><span class="st">'</span>.<span class="bu">format</span>) <span class="cf">if</span> x.name <span class="kw">in</span> [<span class="st">'b'</span>, <span class="st">'95% CI_l'</span>, <span class="st">'95% CI_u'</span>, <span class="st">'pd'</span>] <span class="cf">else</span> x)</span>
+<span id="cb2-90"><a href="#cb2-90" aria-hidden="true" tabindex="-1"></a>    </span>
+<span id="cb2-91"><a href="#cb2-91" aria-hidden="true" tabindex="-1"></a><span class="co"># --- Data Processing ---</span></span>
+<span id="cb2-92"><a href="#cb2-92" aria-hidden="true" tabindex="-1"></a><span class="co"># Load raw data</span></span>
+<span id="cb2-93"><a href="#cb2-93" aria-hidden="true" tabindex="-1"></a>dat_adj_amt_raw <span class="op">=</span> pd.read_excel(<span class="st">"Manuscript/Resubmission2/Analysis/Data_AgeIncome.xlsx"</span>, sheet_name<span class="op">=</span><span class="st">"Adj-Amt"</span>)</span>
+<span id="cb2-94"><a href="#cb2-94" aria-hidden="true" tabindex="-1"></a>dat_mcq_raw <span class="op">=</span> pd.read_excel(<span class="st">"Manuscript/Resubmission2/Analysis/Data_AgeIncome.xlsx"</span>, sheet_name<span class="op">=</span><span class="st">"MCQ"</span>)</span>
+<span id="cb2-95"><a href="#cb2-95" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-96"><a href="#cb2-96" aria-hidden="true" tabindex="-1"></a><span class="co"># Assign k and Amount values for MCQ</span></span>
+<span id="cb2-97"><a href="#cb2-97" aria-hidden="true" tabindex="-1"></a>k_conditions <span class="op">=</span> [dat_mcq_raw[<span class="st">'Q_ID'</span>] <span class="op">==</span> i <span class="cf">for</span> i <span class="kw">in</span> <span class="bu">range</span>(<span class="dv">1</span>, <span class="dv">28</span>)]</span>
+<span id="cb2-98"><a href="#cb2-98" aria-hidden="true" tabindex="-1"></a>k_values <span class="op">=</span> [<span class="fl">0.00016</span>, <span class="fl">0.006</span>, <span class="fl">0.006</span>, <span class="fl">0.25</span>, <span class="fl">0.041</span>, <span class="fl">0.0004</span>, <span class="fl">0.1</span>, <span class="fl">0.1</span>, <span class="fl">0.00016</span>, <span class="fl">0.006</span>, </span>
+<span id="cb2-99"><a href="#cb2-99" aria-hidden="true" tabindex="-1"></a>            <span class="fl">0.25</span>, <span class="fl">0.001</span>, <span class="fl">0.00016</span>, <span class="fl">0.041</span>, <span class="fl">0.0025</span>, <span class="fl">0.0025</span>, <span class="fl">0.0004</span>, <span class="fl">0.016</span>, <span class="fl">0.1</span>, <span class="fl">0.0004</span>, </span>
+<span id="cb2-100"><a href="#cb2-100" aria-hidden="true" tabindex="-1"></a>            <span class="fl">0.016</span>, <span class="fl">0.0025</span>, <span class="fl">0.041</span>, <span class="fl">0.001</span>, <span class="fl">0.016</span>, <span class="fl">0.001</span>, <span class="fl">0.25</span>]</span>
+<span id="cb2-101"><a href="#cb2-101" aria-hidden="true" tabindex="-1"></a>amt_values <span class="op">=</span> [<span class="st">"$50-$60"</span>, <span class="st">"$75-$85"</span>, <span class="st">"$25-$35"</span>, <span class="st">"$75-$85"</span>, <span class="st">"$25-$35"</span>, <span class="st">"$50-$60"</span>, </span>
+<span id="cb2-102"><a href="#cb2-102" aria-hidden="true" tabindex="-1"></a>              <span class="st">"$25-$35"</span>, <span class="st">"$50-$60"</span>, <span class="st">"$75-$85"</span>, <span class="st">"$50-$60"</span>, <span class="st">"$25-$35"</span>, <span class="st">"$75-$85"</span>, </span>
+<span id="cb2-103"><a href="#cb2-103" aria-hidden="true" tabindex="-1"></a>              <span class="st">"$25-$35"</span>, <span class="st">"$50-$60"</span>, <span class="st">"$75-$85"</span>, <span class="st">"$50-$60"</span>, <span class="st">"$75-$85"</span>, <span class="st">"$25-$35"</span>, </span>
+<span id="cb2-104"><a href="#cb2-104" aria-hidden="true" tabindex="-1"></a>              <span class="st">"$75-$85"</span>, <span class="st">"$25-$35"</span>, <span class="st">"$50-$60"</span>, <span class="st">"$25-$35"</span>, <span class="st">"$75-$85"</span>, <span class="st">"$50-$60"</span>, </span>
+<span id="cb2-105"><a href="#cb2-105" aria-hidden="true" tabindex="-1"></a>              <span class="st">"$75-$85"</span>, <span class="st">"$25-$35"</span>, <span class="st">"$50-$60"</span>]</span>
+<span id="cb2-106"><a href="#cb2-106" aria-hidden="true" tabindex="-1"></a>dat_mcq_raw[<span class="st">'k'</span>] <span class="op">=</span> np.select(k_conditions, k_values, default<span class="op">=</span>np.nan)</span>
+<span id="cb2-107"><a href="#cb2-107" aria-hidden="true" tabindex="-1"></a>dat_mcq_raw[<span class="st">'Amount'</span>] <span class="op">=</span> pd.Categorical(np.select(k_conditions, amt_values, default<span class="op">=</span><span class="va">None</span>), </span>
+<span id="cb2-108"><a href="#cb2-108" aria-hidden="true" tabindex="-1"></a>                                     categories<span class="op">=</span>[<span class="st">"$75-$85"</span>, <span class="st">"$50-$60"</span>, <span class="st">"$25-$35"</span>], ordered<span class="op">=</span><span class="va">True</span>)</span>
+<span id="cb2-109"><a href="#cb2-109" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-110"><a href="#cb2-110" aria-hidden="true" tabindex="-1"></a><span class="co"># Process individual-level data</span></span>
+<span id="cb2-111"><a href="#cb2-111" aria-hidden="true" tabindex="-1"></a>adj_amt_processed <span class="op">=</span> dat_adj_amt_raw[dat_adj_amt_raw[<span class="st">'Delay'</span>] <span class="op">!=</span> <span class="dv">730</span>].groupby([<span class="st">'ID'</span>, <span class="st">'Amount'</span>]).<span class="bu">apply</span>(</span>
+<span id="cb2-112"><a href="#cb2-112" aria-hidden="true" tabindex="-1"></a>    <span class="kw">lambda</span> g: pd.Series({<span class="st">'AuC'</span>: np.trapz(g[<span class="st">'RSV'</span>], g[<span class="st">'Delay'</span>] <span class="op">/</span> g[<span class="st">'Delay'</span>].<span class="bu">max</span>())})</span>
+<span id="cb2-113"><a href="#cb2-113" aria-hidden="true" tabindex="-1"></a>).reset_index()</span>
+<span id="cb2-114"><a href="#cb2-114" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-115"><a href="#cb2-115" aria-hidden="true" tabindex="-1"></a>mcq_processed <span class="op">=</span> dat_mcq_raw.groupby([<span class="st">'ID'</span>, <span class="st">'Amount'</span>], observed<span class="op">=</span><span class="va">True</span>).agg(Num_Choice<span class="op">=</span>(<span class="st">'Choice'</span>, <span class="st">'sum'</span>)).reset_index()</span>
+<span id="cb2-116"><a href="#cb2-116" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-117"><a href="#cb2-117" aria-hidden="true" tabindex="-1"></a><span class="co"># Combine and create final analysis dataframes</span></span>
+<span id="cb2-118"><a href="#cb2-118" aria-hidden="true" tabindex="-1"></a>demographics <span class="op">=</span> dat_adj_amt_raw[[<span class="st">'ID'</span>, <span class="st">'Group'</span>, <span class="st">'Age'</span>, <span class="st">'Gender'</span>, <span class="st">'Education'</span>, <span class="st">'HADS'</span>]].drop_duplicates()</span>
+<span id="cb2-119"><a href="#cb2-119" aria-hidden="true" tabindex="-1"></a>demographics[<span class="st">'Age_grp'</span>] <span class="op">=</span> np.where(demographics[<span class="st">'Group'</span>].isin([<span class="dv">1</span>, <span class="dv">2</span>]), <span class="dv">0</span>, <span class="dv">1</span>)    <span class="co"># 0=Younger</span></span>
+<span id="cb2-120"><a href="#cb2-120" aria-hidden="true" tabindex="-1"></a>demographics[<span class="st">'Income_grp'</span>] <span class="op">=</span> np.where(demographics[<span class="st">'Group'</span>].isin([<span class="dv">1</span>, <span class="dv">3</span>]), <span class="dv">0</span>, <span class="dv">1</span>) <span class="co"># 0=Lower</span></span>
+<span id="cb2-121"><a href="#cb2-121" aria-hidden="true" tabindex="-1"></a>demographics[<span class="st">'Education_grp'</span>] <span class="op">=</span> np.where(demographics[<span class="st">'Education'</span>] <span class="op">&lt;=</span> <span class="dv">3</span>, <span class="dv">0</span>, <span class="dv">1</span>)</span>
+<span id="cb2-122"><a href="#cb2-122" aria-hidden="true" tabindex="-1"></a>demographics[<span class="st">'HADS'</span>] <span class="op">=</span> pd.to_numeric(demographics[<span class="st">'HADS'</span>], errors<span class="op">=</span><span class="st">'coerce'</span>)</span>
+<span id="cb2-123"><a href="#cb2-123" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-124"><a href="#cb2-124" aria-hidden="true" tabindex="-1"></a>MCQ_ID_df <span class="op">=</span> pd.merge(mcq_processed, demographics, on<span class="op">=</span><span class="st">'ID'</span>)</span>
+<span id="cb2-125"><a href="#cb2-125" aria-hidden="true" tabindex="-1"></a>AdjAmt_ID_df <span class="op">=</span> pd.merge(adj_amt_processed, demographics, on<span class="op">=</span><span class="st">'ID'</span>)</span>
+<span id="cb2-126"><a href="#cb2-126" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-127"><a href="#cb2-127" aria-hidden="true" tabindex="-1"></a><span class="co"># Create Model-Specific Dataframes with Centered Variables</span></span>
+<span id="cb2-128"><a href="#cb2-128" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> center_vars(df, cols):</span>
+<span id="cb2-129"><a href="#cb2-129" aria-hidden="true" tabindex="-1"></a>    <span class="cf">for</span> col <span class="kw">in</span> cols:</span>
+<span id="cb2-130"><a href="#cb2-130" aria-hidden="true" tabindex="-1"></a>        df[<span class="ss">f'</span><span class="sc">{</span>col<span class="sc">}</span><span class="ss">_c'</span>] <span class="op">=</span> df[col] <span class="op">-</span> df[col].mean()</span>
+<span id="cb2-131"><a href="#cb2-131" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> df</span>
+<span id="cb2-132"><a href="#cb2-132" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-133"><a href="#cb2-133" aria-hidden="true" tabindex="-1"></a>MCQ_mod1_df <span class="op">=</span> center_vars(MCQ_ID_df[MCQ_ID_df[<span class="st">'Amount'</span>] <span class="op">!=</span> <span class="st">"$50-$60"</span>].copy(), [<span class="st">'Age_grp'</span>, <span class="st">'Income_grp'</span>])</span>
+<span id="cb2-134"><a href="#cb2-134" aria-hidden="true" tabindex="-1"></a>AdjAmt_mod1_df <span class="op">=</span> center_vars(AdjAmt_ID_df[AdjAmt_ID_df[<span class="st">'Amount'</span>] <span class="op">!=</span> <span class="dv">500</span>].copy(), [<span class="st">'Age_grp'</span>, <span class="st">'Income_grp'</span>])</span>
+<span id="cb2-135"><a href="#cb2-135" aria-hidden="true" tabindex="-1"></a>MCQ_mod1_df[<span class="st">'trials'</span>] <span class="op">=</span> <span class="dv">9</span></span>
+<span id="cb2-136"><a href="#cb2-136" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-137"><a href="#cb2-137" aria-hidden="true" tabindex="-1"></a><span class="co"># Create the Composite z-Score DataFrame</span></span>
+<span id="cb2-138"><a href="#cb2-138" aria-hidden="true" tabindex="-1"></a>mcq_z <span class="op">=</span> MCQ_ID_df[MCQ_ID_df[<span class="st">'Amount'</span>] <span class="op">!=</span> <span class="st">"$50-$60"</span>].sort_values([<span class="st">'ID'</span>, <span class="st">'Amount'</span>], ascending<span class="op">=</span>[<span class="va">True</span>, <span class="va">False</span>])</span>
+<span id="cb2-139"><a href="#cb2-139" aria-hidden="true" tabindex="-1"></a>adj_z <span class="op">=</span> AdjAmt_ID_df[AdjAmt_ID_df[<span class="st">'Amount'</span>] <span class="op">!=</span> <span class="dv">500</span>]</span>
+<span id="cb2-140"><a href="#cb2-140" aria-hidden="true" tabindex="-1"></a>z_df <span class="op">=</span> mcq_z[[<span class="st">'ID'</span>, <span class="st">'Age_grp'</span>, <span class="st">'Income_grp'</span>, <span class="st">'Age'</span>, <span class="st">'Num_Choice'</span>]].copy()</span>
+<span id="cb2-141"><a href="#cb2-141" aria-hidden="true" tabindex="-1"></a>z_df[<span class="st">'AuC'</span>] <span class="op">=</span> adj_z[<span class="st">'AuC'</span>].values</span>
+<span id="cb2-142"><a href="#cb2-142" aria-hidden="true" tabindex="-1"></a>z_df[<span class="st">'MCQ_z'</span>] <span class="op">=</span> (z_df[<span class="st">'Num_Choice'</span>] <span class="op">-</span> z_df[<span class="st">'Num_Choice'</span>].mean()) <span class="op">/</span> z_df[<span class="st">'Num_Choice'</span>].std()</span>
+<span id="cb2-143"><a href="#cb2-143" aria-hidden="true" tabindex="-1"></a>z_df[<span class="st">'AdjAmt_z'</span>] <span class="op">=</span> (z_df[<span class="st">'AuC'</span>] <span class="op">-</span> z_df[<span class="st">'AuC'</span>].mean()) <span class="op">/</span> z_df[<span class="st">'AuC'</span>].std()</span>
+<span id="cb2-144"><a href="#cb2-144" aria-hidden="true" tabindex="-1"></a>z_df[<span class="st">'z_score'</span>] <span class="op">=</span> z_df[[<span class="st">'MCQ_z'</span>, <span class="st">'AdjAmt_z'</span>]].mean(axis<span class="op">=</span><span class="dv">1</span>)</span>
+<span id="cb2-145"><a href="#cb2-145" aria-hidden="true" tabindex="-1"></a>z_df <span class="op">=</span> z_df.groupby(<span class="st">'ID'</span>).mean().reset_index() <span class="co"># Get mean z-score per participant</span></span>
+<span id="cb2-146"><a href="#cb2-146" aria-hidden="true" tabindex="-1"></a>z_df <span class="op">=</span> center_vars(z_df, [<span class="st">'Age_grp'</span>, <span class="st">'Income_grp'</span>])</span>
+<span id="cb2-147"><a href="#cb2-147" aria-hidden="true" tabindex="-1"></a>z_df[<span class="st">'Age_c'</span>] <span class="op">=</span> (z_df[<span class="st">'Age'</span>] <span class="op">-</span> z_df[<span class="st">'Age'</span>].mean()) <span class="op">/</span> z_df[<span class="st">'Age'</span>].std()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<section id="data-quality-reliability-checks" class="level2">
+<h2 class="anchored" data-anchor-id="data-quality-reliability-checks">2. Data Quality &amp; Reliability Checks</h2>
+<p>This section replicates the initial analyses from the paper that establish the quality of the discounting data, including group-level model fits and within-procedure correlations.</p>
+<div id="908578b3" class="cell" data-execution_count="7">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># --- Group-Level Data Frames ---</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>group_labels <span class="op">=</span> {<span class="dv">1</span>: <span class="st">"Younger, Lower-Income"</span>, <span class="dv">2</span>: <span class="st">"Younger, Higher-Income"</span>, <span class="dv">3</span>: <span class="st">"Older, Lower-Income"</span>, <span class="dv">4</span>: <span class="st">"Older, Higher-Income"</span>}</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>dat_mcq_raw[<span class="st">'Group_Label'</span>] <span class="op">=</span> dat_mcq_raw[<span class="st">'Group'</span>].<span class="bu">map</span>(group_labels)</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>dat_adj_amt_raw[<span class="st">'Group_Label'</span>] <span class="op">=</span> dat_adj_amt_raw[<span class="st">'Group'</span>].<span class="bu">map</span>(group_labels)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a>dat_adj_amt_raw[<span class="st">'Amount_Label'</span>] <span class="op">=</span> pd.Categorical(dat_adj_amt_raw[<span class="st">'Amount'</span>].replace({<span class="dv">30</span>:<span class="st">"$30"</span>, <span class="dv">80</span>:<span class="st">"$80"</span>, <span class="dv">500</span>:<span class="st">"$500"</span>}))</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>MCQ_grp_df <span class="op">=</span> dat_mcq_raw.groupby([<span class="st">'Group_Label'</span>, <span class="st">'Amount'</span>, <span class="st">'k'</span>], observed<span class="op">=</span><span class="va">True</span>).agg(Prop<span class="op">=</span>(<span class="st">'Choice'</span>, <span class="st">'mean'</span>)).reset_index()</span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>MCQ_grp_df[<span class="st">'log_k'</span>] <span class="op">=</span> np.log(MCQ_grp_df[<span class="st">'k'</span>])</span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>AdjAmt_grp_df <span class="op">=</span> dat_adj_amt_raw.groupby([<span class="st">'Group_Label'</span>, <span class="st">'Amount_Label'</span>, <span class="st">'Delay'</span>], observed<span class="op">=</span><span class="va">True</span>).agg(Mean_RSV<span class="op">=</span>(<span class="st">'RSV'</span>, <span class="st">'mean'</span>)).reset_index()</span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a><span class="co"># --- Model Definitions ---</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> logistic_growth(log_k, a, r):</span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">1</span> <span class="op">/</span> (<span class="dv">1</span> <span class="op">+</span> np.exp(<span class="op">-</span>(log_k <span class="op">-</span> a) <span class="op">*</span> r))</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> hyperboloid(delay, k, s):</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> <span class="dv">1</span> <span class="op">/</span> (<span class="dv">1</span> <span class="op">+</span> k <span class="op">*</span> delay)<span class="op">**</span>s</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a><span class="co"># --- MCQ: Group-Level Logistic Growth Model Fit ---</span></span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"--- MCQ: R-squared for Group-Level Logistic Growth Fits ---"</span>)</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a>r2_mcq <span class="op">=</span> MCQ_grp_df.groupby([<span class="st">'Group_Label'</span>, <span class="st">'Amount'</span>], observed<span class="op">=</span><span class="va">True</span>).<span class="bu">apply</span>(</span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a>    <span class="kw">lambda</span> g: r2_score(g[<span class="st">'Prop'</span>], logistic_growth(g[<span class="st">'log_k'</span>], <span class="op">*</span>curve_fit(logistic_growth, g[<span class="st">'log_k'</span>], g[<span class="st">'Prop'</span>], p0<span class="op">=</span>[<span class="op">-</span><span class="dv">4</span>, <span class="dv">1</span>])[<span class="dv">0</span>]))</span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a>).unstack()</span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(r2_mcq)</span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a><span class="co"># --- Adj-Amt: Group-Level Hyperboloid Model Fit ---</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">--- Adj-Amt: R-squared for Group-Level Hyperboloid Fits ---"</span>)</span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>r2_adj <span class="op">=</span> AdjAmt_grp_df.groupby([<span class="st">'Group_Label'</span>, <span class="st">'Amount_Label'</span>], observed<span class="op">=</span><span class="va">True</span>).<span class="bu">apply</span>(</span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>    <span class="kw">lambda</span> g: r2_score(g[<span class="st">'Mean_RSV'</span>], hyperboloid(g[<span class="st">'Delay'</span>], <span class="op">*</span>curve_fit(hyperboloid, g[<span class="st">'Delay'</span>], g[<span class="st">'Mean_RSV'</span>], p0<span class="op">=</span>[<span class="fl">0.1</span>, <span class="dv">1</span>])[<span class="dv">0</span>]))</span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a>).unstack()</span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(r2_adj)</span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a><span class="co"># --- Within-Procedure Reliability (Correlations) ---</span></span>
+<span id="cb3-33"><a href="#cb3-33" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">--- MCQ: Within-Procedure Correlations (Number of Delayed Choices) ---"</span>)</span>
+<span id="cb3-34"><a href="#cb3-34" aria-hidden="true" tabindex="-1"></a>mcq_pivot <span class="op">=</span> MCQ_ID_df.pivot(index<span class="op">=</span><span class="st">'ID'</span>, columns<span class="op">=</span><span class="st">'Amount'</span>, values<span class="op">=</span><span class="st">'Num_Choice'</span>)</span>
+<span id="cb3-35"><a href="#cb3-35" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(mcq_pivot.corr())</span>
+<span id="cb3-36"><a href="#cb3-36" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-37"><a href="#cb3-37" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">--- Adj-Amt: Within-Procedure Correlations (AuC) ---"</span>)</span>
+<span id="cb3-38"><a href="#cb3-38" aria-hidden="true" tabindex="-1"></a>adj_pivot <span class="op">=</span> AdjAmt_ID_df.pivot(index<span class="op">=</span><span class="st">'ID'</span>, columns<span class="op">=</span><span class="st">'Amount'</span>, values<span class="op">=</span><span class="st">'AuC'</span>)</span>
+<span id="cb3-39"><a href="#cb3-39" aria-hidden="true" tabindex="-1"></a>adj_pivot.columns <span class="op">=</span> [<span class="ss">f"$</span><span class="sc">{</span>c<span class="sc">}</span><span class="ss">"</span> <span class="cf">for</span> c <span class="kw">in</span> adj_pivot.columns]</span>
+<span id="cb3-40"><a href="#cb3-40" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(adj_pivot.corr())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>--- MCQ: R-squared for Group-Level Logistic Growth Fits ---
+Amount                  $75-$85  $50-$60  $25-$35
+Group_Label                                      
+Older, Higher-Income      0.983    0.991    0.996
+Older, Lower-Income       0.994    0.996    0.996
+Younger, Higher-Income    0.993    0.987    0.994
+Younger, Lower-Income     0.995    0.991    0.992
+
+--- Adj-Amt: R-squared for Group-Level Hyperboloid Fits ---
+Amount_Label             $30  $500   $80
+Group_Label                             
+Older, Higher-Income   0.967 0.943 0.951
+Older, Lower-Income    0.944 0.978 0.985
+Younger, Higher-Income 0.997 0.959 0.988
+Younger, Lower-Income  0.997 0.974 0.990
+
+--- MCQ: Within-Procedure Correlations (Number of Delayed Choices) ---
+Amount   $75-$85  $50-$60  $25-$35
+Amount                            
+$75-$85    1.000    0.940    0.903
+$50-$60    0.940    1.000    0.918
+$25-$35    0.903    0.918    1.000
+
+--- Adj-Amt: Within-Procedure Correlations (AuC) ---
+       $30   $80  $500
+$30  1.000 0.907 0.774
+$80  0.907 1.000 0.842
+$500 0.774 0.842 1.000</code></pre>
+</div>
+</div>
+</section>
+<section id="hypothesis-testing-effects-of-age-on-discounting" class="level2">
+<h2 class="anchored" data-anchor-id="hypothesis-testing-effects-of-age-on-discounting">3. Hypothesis Testing: Effects of Age on Discounting</h2>
+<p>This section replicates the focused contrasts that test the buffering hypothesis by examining the effect of age at each level of income. The results correspond to <strong>Table 2</strong> in the publication.</p>
+<div id="84573f04" class="cell" data-execution_count="14">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="co"># --- Model 1: Discounting = fn(Age) ---</span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"--- Model 1: Age Effects ---"</span>)</span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Lower Income</span></span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>mcq_low_inc_mod1_idata <span class="op">=</span> binomial_pymc(<span class="st">"Num_Choice ~ Age_grp_c"</span>, MCQ_mod1_df[MCQ_mod1_df[<span class="st">'Income_grp'</span>] <span class="op">==</span> <span class="dv">0</span>])</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a>adj_low_inc_mod1_idata <span class="op">=</span> beta_pymc(<span class="st">"AuC ~ Age_grp_c"</span>, AdjAmt_mod1_df[AdjAmt_mod1_df[<span class="st">'Income_grp'</span>] <span class="op">==</span> <span class="dv">0</span>])</span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Higher Income</span></span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>mcq_high_inc_mod1_idata <span class="op">=</span> binomial_pymc(<span class="st">"Num_Choice ~ Age_grp_c"</span>, MCQ_mod1_df[MCQ_mod1_df[<span class="st">'Income_grp'</span>] <span class="op">==</span> <span class="dv">1</span>])</span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>adj_high_inc_mod1_idata <span class="op">=</span> beta_pymc(<span class="st">"AuC ~ Age_grp_c"</span>, AdjAmt_mod1_df[AdjAmt_mod1_df[<span class="st">'Income_grp'</span>] <span class="op">==</span> <span class="dv">1</span>])</span>
+<span id="cb5-9"><a href="#cb5-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb5-10"><a href="#cb5-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">MCQ Lower Income:"</span>)</span>
+<span id="cb5-11"><a href="#cb5-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(pymc_summary(mcq_low_inc_mod1_idata, [<span class="st">'Intercept'</span>, <span class="st">'Age_grp_c'</span>]))</span>
+<span id="cb5-12"><a href="#cb5-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">Adj-Amt Lower Income:"</span>)</span>
+<span id="cb5-13"><a href="#cb5-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(pymc_summary(adj_low_inc_mod1_idata, [<span class="st">'Intercept'</span>, <span class="st">'Age_grp_c'</span>]))</span>
+<span id="cb5-14"><a href="#cb5-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">MCQ Higher Income:"</span>)</span>
+<span id="cb5-15"><a href="#cb5-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(pymc_summary(mcq_high_inc_mod1_idata, [<span class="st">'Intercept'</span>, <span class="st">'Age_grp_c'</span>]))</span>
+<span id="cb5-16"><a href="#cb5-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">Adj-Amt Higher Income:"</span>)</span>
+<span id="cb5-17"><a href="#cb5-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(pymc_summary(adj_high_inc_mod1_idata, [<span class="st">'Intercept'</span>, <span class="st">'Age_grp_c'</span>]))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Initializing NUTS using jitter+adapt_diag...</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>--- Model 1: Age Effects ---</code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Multiprocess sampling (4 chains in 4 jobs)
+NUTS: [Intercept, Age_grp_c]
+Sampling 4 chains for 2_000 tune and 2_000 draw iterations (8_000 + 8_000 draws total) took 351 seconds.
+Initializing NUTS using jitter+adapt_diag...
+Multiprocess sampling (4 chains in 4 jobs)
+NUTS: [Intercept, Age_grp_c, nu]
+Sampling 4 chains for 2_000 tune and 2_000 draw iterations (8_000 + 8_000 draws total) took 1637 seconds.
+Initializing NUTS using jitter+adapt_diag...
+Multiprocess sampling (4 chains in 4 jobs)
+NUTS: [Intercept, Age_grp_c]
+Sampling 4 chains for 2_000 tune and 2_000 draw iterations (8_000 + 8_000 draws total) took 672 seconds.
+Initializing NUTS using jitter+adapt_diag...
+Multiprocess sampling (4 chains in 4 jobs)
+NUTS: [Intercept, Age_grp_c, nu]
+Sampling 4 chains for 2_000 tune and 2_000 draw iterations (8_000 + 8_000 draws total) took 970 seconds.</code></pre>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+MCQ Lower Income:
+                b 95% CI_l 95% CI_u     pd signif
+Intercept  -0.091   -0.161   -0.022  0.995      *
+Age_grp_c   0.344    0.216    0.498  1.000      *
+
+Adj-Amt Lower Income:
+               b 95% CI_l 95% CI_u     pd signif
+Intercept  0.393    0.291    0.493  1.000      *
+Age_grp_c  0.367    0.164    0.559  1.000      *
+
+MCQ Higher Income:
+               b 95% CI_l 95% CI_u     pd signif
+Intercept  0.034   -0.040    0.098  0.835       
+Age_grp_c  0.050   -0.086    0.181  0.766       
+
+Adj-Amt Higher Income:
+               b 95% CI_l 95% CI_u     pd signif
+Intercept  0.589    0.486    0.689  1.000      *
+Age_grp_c  0.047   -0.137    0.243  0.683       </code></pre>
+</div>
+</div>
+</section>
+<section id="hypothesis-testing-effects-of-income-on-discounting" class="level2">
+<h2 class="anchored" data-anchor-id="hypothesis-testing-effects-of-income-on-discounting">4. Hypothesis Testing: Effects of Income on Discounting</h2>
+<p>This section replicates the complementary focused contrasts that test the effect of income at each level of age. The results correspond to <strong>Table 3</strong> in the publication.</p>
+<div id="4d41919a" class="cell">
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a><span class="co"># --- Model 1: Discounting = fn(Income) ---</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"--- Model 1: Income Effects ---"</span>)</span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a><span class="co"># Younger</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>mcq_young_mod1_idata <span class="op">=</span> binomial_pymc(<span class="st">"Num_Choice ~ Income_grp_c"</span>, MCQ_mod1_df[MCQ_mod1_df[<span class="st">'Age_grp'</span>] <span class="op">==</span> <span class="dv">0</span>])</span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>adj_young_mod1_idata <span class="op">=</span> beta_pymc(<span class="st">"AuC ~ Income_grp_c"</span>, AdjAmt_mod1_df[AdjAmt_mod1_df[<span class="st">'Age_grp'</span>] <span class="op">==</span> <span class="dv">0</span>])</span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Older</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>mcq_old_mod1_idata <span class="op">=</span> binomial_pymc(<span class="st">"Num_Choice ~ Income_grp_c"</span>, MCQ_mod1_df[MCQ_mod1_df[<span class="st">'Age_grp'</span>] <span class="op">==</span> <span class="dv">1</span>])</span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>adj_old_mod1_idata <span class="op">=</span> beta_pymc(<span class="st">"AuC ~ Income_grp_c"</span>, AdjAmt_mod1_df[AdjAmt_mod1_df[<span class="st">'Age_grp'</span>] <span class="op">==</span> <span class="dv">1</span>])</span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">MCQ Younger:"</span>)</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(pymc_summary(mcq_young_mod1_idata, [<span class="st">'Intercept'</span>, <span class="st">'Income_grp_c'</span>]))</span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">Adj-Amt Younger:"</span>)</span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(pymc_summary(adj_young_mod1_idata, [<span class="st">'Intercept'</span>, <span class="st">'Income_grp_c'</span>]))</span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">MCQ Older:"</span>)</span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(pymc_summary(mcq_old_mod1_idata, [<span class="st">'Intercept'</span>, <span class="st">'Income_grp_c'</span>]))</span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">Adj-Amt Older:"</span>)</span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(pymc_summary(adj_old_mod1_idata, [<span class="st">'Intercept'</span>, <span class="st">'Income_grp_c'</span>]))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+</section>
+<section id="association-with-composite-discounting-measure" class="level2">
+<h2 class="anchored" data-anchor-id="association-with-composite-discounting-measure">5. Association with Composite Discounting Measure</h2>
+<p>The following analyses evaluate the correlations between Age Group and the composite z-score for each Income Group, and between Income Group and the z-score for each Age Group.</p>
+<div id="95bb6610" class="cell" data-execution_count="16">
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> print_corr(df, x_col, y_col):</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">"""Helper function to print correlation results."""</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>    res <span class="op">=</span> pearsonr(df[x_col], df[y_col])</span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>    <span class="bu">print</span>(<span class="ss">f"Correlation between </span><span class="sc">{</span>x_col<span class="sc">}</span><span class="ss"> and </span><span class="sc">{</span>y_col<span class="sc">}</span><span class="ss">: r = </span><span class="sc">{</span>res<span class="sc">.</span>statistic<span class="sc">:.3f}</span><span class="ss">, p = </span><span class="sc">{</span>res<span class="sc">.</span>pvalue<span class="sc">:.3f}</span><span class="ss">"</span>)</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="co"># Correlation between Age Group and z-score for each Income Group</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"--- Age Effect on z-score within each Income Group ---"</span>)</span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a>print_corr(z_df[z_df[<span class="st">'Income_grp'</span>] <span class="op">==</span> <span class="dv">0</span>], <span class="st">'z_score'</span>, <span class="st">'Age_grp'</span>) <span class="co"># Lower Income</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a>print_corr(z_df[z_df[<span class="st">'Income_grp'</span>] <span class="op">==</span> <span class="dv">1</span>], <span class="st">'z_score'</span>, <span class="st">'Age_grp'</span>) <span class="co"># Higher Income</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a><span class="co"># Correlation between Income Group and z-score for each Age Group</span></span>
+<span id="cb11-12"><a href="#cb11-12" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">--- Income Effect on z-score within each Age Group ---"</span>)</span>
+<span id="cb11-13"><a href="#cb11-13" aria-hidden="true" tabindex="-1"></a>print_corr(z_df[z_df[<span class="st">'Age_grp'</span>] <span class="op">==</span> <span class="dv">0</span>], <span class="st">'z_score'</span>, <span class="st">'Income_grp'</span>) <span class="co"># Younger</span></span>
+<span id="cb11-14"><a href="#cb11-14" aria-hidden="true" tabindex="-1"></a>print_corr(z_df[z_df[<span class="st">'Age_grp'</span>] <span class="op">==</span> <span class="dv">1</span>], <span class="st">'z_score'</span>, <span class="st">'Income_grp'</span>) <span class="co"># Older</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>--- Age Effect on z-score within each Income Group ---
+Correlation between z_score and Age_grp: r = 0.202, p = 0.007
+Correlation between z_score and Age_grp: r = 0.041, p = 0.581
+
+--- Income Effect on z-score within each Age Group ---
+Correlation between z_score and Income_grp: r = 0.163, p = 0.026
+Correlation between z_score and Income_grp: r = 0.003, p = 0.964</code></pre>
+</div>
+</div>
+</section>
+<section id="the-magnitude-of-the-age-difference" class="level2">
+<h2 class="anchored" data-anchor-id="the-magnitude-of-the-age-difference">6. The Magnitude of the Age Difference</h2>
+<p>These final analyses use the composite discounting measure to examine the magnitude of the effects of Age and Income on discounting via linear regression.</p>
+<div id="32fc32f3" class="cell" data-execution_count="19">
+<div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a><span class="co"># --- Mean z-score for each group ---</span></span>
+<span id="cb13-2"><a href="#cb13-2" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"--- Mean Composite z-Score by Group ---"</span>)</span>
+<span id="cb13-3"><a href="#cb13-3" aria-hidden="true" tabindex="-1"></a>mean_z_scores <span class="op">=</span> z_df.groupby([<span class="st">'Age_grp'</span>, <span class="st">'Income_grp'</span>])[<span class="st">'z_score'</span>].mean().reset_index()</span>
+<span id="cb13-4"><a href="#cb13-4" aria-hidden="true" tabindex="-1"></a>mean_z_scores[<span class="st">'Age_grp'</span>] <span class="op">=</span> np.where(mean_z_scores[<span class="st">'Age_grp'</span>] <span class="op">==</span> <span class="dv">0</span>, <span class="st">"Younger"</span>, <span class="st">"Older"</span>)</span>
+<span id="cb13-5"><a href="#cb13-5" aria-hidden="true" tabindex="-1"></a>mean_z_scores[<span class="st">'Income_grp'</span>] <span class="op">=</span> np.where(mean_z_scores[<span class="st">'Income_grp'</span>] <span class="op">==</span> <span class="dv">0</span>, <span class="st">"Lower-Income"</span>, <span class="st">"Higher-Income"</span>)</span>
+<span id="cb13-6"><a href="#cb13-6" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(mean_z_scores)</span>
+<span id="cb13-7"><a href="#cb13-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-8"><a href="#cb13-8" aria-hidden="true" tabindex="-1"></a><span class="co"># --- z-score = fn[Age, Income, Age x Income] ---</span></span>
+<span id="cb13-9"><a href="#cb13-9" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">--- Full Model: z-score ~ Age * Income ---"</span>)</span>
+<span id="cb13-10"><a href="#cb13-10" aria-hidden="true" tabindex="-1"></a>full_model <span class="op">=</span> smf.ols(<span class="st">'z_score ~ Age_grp_c * Income_grp_c'</span>, data<span class="op">=</span>z_df).fit()</span>
+<span id="cb13-11"><a href="#cb13-11" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(full_model.summary())</span>
+<span id="cb13-12"><a href="#cb13-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-13"><a href="#cb13-13" aria-hidden="true" tabindex="-1"></a><span class="co"># --- Age effect in each income group using continuous age ---</span></span>
+<span id="cb13-14"><a href="#cb13-14" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">--- Age Effect on z-score within each Income Group (Continuous Age) ---"</span>)</span>
+<span id="cb13-15"><a href="#cb13-15" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">Lower Income Group:"</span>)</span>
+<span id="cb13-16"><a href="#cb13-16" aria-hidden="true" tabindex="-1"></a>low_inc_model <span class="op">=</span> smf.ols(<span class="st">'z_score ~ Age'</span>, data<span class="op">=</span>z_df[z_df[<span class="st">'Income_grp'</span>] <span class="op">==</span> <span class="dv">0</span>]).fit()</span>
+<span id="cb13-17"><a href="#cb13-17" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(low_inc_model.summary())</span>
+<span id="cb13-18"><a href="#cb13-18" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb13-19"><a href="#cb13-19" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(<span class="st">"</span><span class="ch">\n</span><span class="st">Higher Income Group:"</span>)</span>
+<span id="cb13-20"><a href="#cb13-20" aria-hidden="true" tabindex="-1"></a>high_inc_model <span class="op">=</span> smf.ols(<span class="st">'z_score ~ Age'</span>, data<span class="op">=</span>z_df[z_df[<span class="st">'Income_grp'</span>] <span class="op">==</span> <span class="dv">1</span>]).fit()</span>
+<span id="cb13-21"><a href="#cb13-21" aria-hidden="true" tabindex="-1"></a><span class="bu">print</span>(high_inc_model.summary())</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>--- Mean Composite z-Score by Group ---
+   Age_grp     Income_grp  z_score
+0  Younger   Lower-Income   -0.266
+1  Younger  Higher-Income    0.043
+2    Older   Lower-Income    0.112
+3    Older  Higher-Income    0.118
+
+--- Full Model: z-score ~ Age * Income ---
+                            OLS Regression Results                            
+==============================================================================
+Dep. Variable:                z_score   R-squared:                       0.028
+Model:                            OLS   Adj. R-squared:                  0.020
+Method:                 Least Squares   F-statistic:                     3.461
+Date:                Thu, 25 Sep 2025   Prob (F-statistic):             0.0166
+Time:                        13:12:09   Log-Likelihood:                -477.72
+No. Observations:                 359   AIC:                             963.4
+Df Residuals:                     355   BIC:                             979.0
+Df Model:                           3                                         
+Covariance Type:            nonrobust                                         
+==========================================================================================
+                             coef    std err          t      P&gt;|t|      [0.025      0.975]
+------------------------------------------------------------------------------------------
+Intercept                 -0.0014      0.049     -0.029      0.977      -0.097       0.094
+Age_grp_c                  0.2236      0.097      2.298      0.022       0.032       0.415
+Income_grp_c               0.1634      0.097      1.681      0.094      -0.028       0.355
+Age_grp_c:Income_grp_c    -0.3020      0.195     -1.552      0.122      -0.685       0.081
+==============================================================================
+Omnibus:                        9.668   Durbin-Watson:                   2.151
+Prob(Omnibus):                  0.008   Jarque-Bera (JB):                7.126
+Skew:                          -0.231   Prob(JB):                       0.0284
+Kurtosis:                       2.488   Cond. No.                         4.00
+==============================================================================
+
+Notes:
+[1] Standard Errors assume that the covariance matrix of the errors is correctly specified.
+
+--- Age Effect on z-score within each Income Group (Continuous Age) ---
+
+Lower Income Group:
+                            OLS Regression Results                            
+==============================================================================
+Dep. Variable:                z_score   R-squared:                       0.034
+Model:                            OLS   Adj. R-squared:                  0.029
+Method:                 Least Squares   F-statistic:                     6.163
+Date:                Thu, 25 Sep 2025   Prob (F-statistic):             0.0140
+Time:                        13:12:09   Log-Likelihood:                -234.63
+No. Observations:                 176   AIC:                             473.3
+Df Residuals:                     174   BIC:                             479.6
+Df Model:                           1                                         
+Covariance Type:            nonrobust                                         
+==============================================================================
+                 coef    std err          t      P&gt;|t|      [0.025      0.975]
+------------------------------------------------------------------------------
+Intercept     -0.7133      0.264     -2.702      0.008      -1.234      -0.192
+Age            0.0115      0.005      2.483      0.014       0.002       0.021
+==============================================================================
+Omnibus:                        2.311   Durbin-Watson:                   2.008
+Prob(Omnibus):                  0.315   Jarque-Bera (JB):                1.736
+Skew:                          -0.035   Prob(JB):                        0.420
+Kurtosis:                       2.518   Cond. No.                         217.
+==============================================================================
+
+Notes:
+[1] Standard Errors assume that the covariance matrix of the errors is correctly specified.
+
+Higher Income Group:
+                            OLS Regression Results                            
+==============================================================================
+Dep. Variable:                z_score   R-squared:                       0.002
+Model:                            OLS   Adj. R-squared:                 -0.003
+Method:                 Least Squares   F-statistic:                    0.4516
+Date:                Thu, 25 Sep 2025   Prob (F-statistic):              0.502
+Time:                        13:12:09   Log-Likelihood:                -243.62
+No. Observations:                 183   AIC:                             491.2
+Df Residuals:                     181   BIC:                             497.7
+Df Model:                           1                                         
+Covariance Type:            nonrobust                                         
+==============================================================================
+                 coef    std err          t      P&gt;|t|      [0.025      0.975]
+------------------------------------------------------------------------------
+Intercept     -0.0994      0.273     -0.365      0.716      -0.637       0.439
+Age            0.0033      0.005      0.672      0.502      -0.006       0.013
+==============================================================================
+Omnibus:                        7.896   Durbin-Watson:                   2.301
+Prob(Omnibus):                  0.019   Jarque-Bera (JB):                7.025
+Skew:                          -0.407   Prob(JB):                       0.0298
+Kurtosis:                       2.492   Cond. No.                         224.
+==============================================================================
+
+Notes:
+[1] Standard Errors assume that the covariance matrix of the errors is correctly specified.</code></pre>
+</div>
+</div>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Copied!");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Copied!");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+        const codeEl = trigger.previousElementSibling.cloneNode(true);
+        for (const childEl of codeEl.children) {
+          if (isCodeAnnotation(childEl)) {
+            childEl.remove();
+          }
+        }
+        return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp('/' + window.location.host + '/');
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+     var links = window.document.querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+        }
+      }
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          let top = null;
+          let height = null;
+          let parent = null;
+          if (lineIds.length > 0) {
+              //compute the position of the single el (top and bottom and make a div)
+              const el = window.document.getElementById(lineIds[0]);
+              top = el.offsetTop;
+              height = el.offsetHeight;
+              parent = el.parentElement.parentElement;
+            if (lineIds.length > 1) {
+              const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+              const bottom = lastEl.offsetTop + lastEl.offsetHeight;
+              height = bottom - top;
+            }
+            if (top !== null && height !== null && parent !== null) {
+              // cook up a div (if necessary) and position it 
+              let div = window.document.getElementById("code-annotation-line-highlight");
+              if (div === null) {
+                div = window.document.createElement("div");
+                div.setAttribute("id", "code-annotation-line-highlight");
+                div.style.position = 'absolute';
+                parent.appendChild(div);
+              }
+              div.style.top = top - 2 + "px";
+              div.style.height = height + 4 + "px";
+              div.style.left = 0;
+              let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+              if (gutterDiv === null) {
+                gutterDiv = window.document.createElement("div");
+                gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+                gutterDiv.style.position = 'absolute';
+                const codeCell = window.document.getElementById(targetCell);
+                const gutter = codeCell.querySelector('.code-annotation-gutter');
+                gutter.appendChild(gutterDiv);
+              }
+              gutterDiv.style.top = top - 2 + "px";
+              gutterDiv.style.height = height + 4 + "px";
+            }
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+</div> <!-- /content -->
+
+
+
+
+</body></html>
