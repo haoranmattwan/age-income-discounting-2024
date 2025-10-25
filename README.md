@@ -1,60 +1,59 @@
-# Age-Related Differences in Delay Discounting: Income Matters
+# Modeling Interaction Effects in Behavioral Science
+### A Reproducible Analysis of Wan et al. (2024), *Psychology and Aging*
 
-This repository contains the analysis scripts, figures, and presentation materials for the peer-reviewed publication:
+This repository contains the complete analysis scripts and materials for the peer-reviewed publication:
 
 > Wan, H., Myerson, J., Green, L., Strube, M. J., & Hale, S. (2024). Age-related differences in delay discounting: Income matters. *Psychology and Aging*. Advance online publication. https://doi.org/10.1037/pag0000818
 
-The data for this study are publicly available on the Open Science Framework at: <https://osf.io/um68t/>.
+The data for this study are publicly available on the Open Science Framework at: **[https://osf.io/um68t/](https://osf.io/um68t/)**.
 
 ---
 
-## Project Overview
+## Project Objective
 
-This study investigates the "buffering hypothesis," which posits that older adults may be less susceptible to the effects of financial scarcity on decision-making compared to younger adults. We examined the interaction between age and income on delay discounting—the tendency to devalue rewards that are further in the future.
+The goal of this project is to investigate how age moderates the relationship between socioeconomic status and intertemporal decision-making. We test the **"buffering hypothesis,"** which predicts that the effect of income on choice behavior is attenuated in older adults.
 
-The analysis employs a series of focused Bayesian multilevel regressions to test for age differences in discounting at both lower and higher income levels. This approach allows for a nuanced examination of the central hypothesis while robustly handling the hierarchical structure of the data.
+The analysis employs a series of focused Bayesian hierarchical models to provide a robust and nuanced test of this interaction, demonstrating a complete and reproducible workflow from data processing to statistical inference and reporting.
 
-## Repository Structure
+## Repository Contents
 
-The project materials are organized into the following folders:
-
-* **/Analysis**: Contains the primary analysis scripts that replicate the findings in the paper.
-    * `analysis.qmd`: A Quarto document with the complete **R** code for the entire workflow. It demonstrates data processing and the fitting of Bayesian hierarchical models using `brms`.
-    * `analysis.ipynb`: A Jupyter Notebook providing a direct **Python** translation of the R analysis, using `pandas` for data manipulation and `pymc` for Bayesian modeling and inference.
-
-* **/Presentation**: Contains a slide deck or poster used to present the findings of this research at an academic conference.
-
-* **/Figure**: Contains the figures as they appear in the final publication.
+| File / Folder | Description |
+| :--- | :--- |
+| **`/Analysis/`** | Contains the primary scripts that replicate all findings in the paper. |
+| `analysis.qmd` | A Quarto document with the complete **R** workflow, using `brms` for Bayesian modeling. |
+| `analysis.ipynb` | A Jupyter Notebook providing a **Python** translation of the analysis, using `pymc` for modeling. |
+| **`/Presentation/`** | A slide deck used to present the research findings at an academic conference. |
+| **`/Figure/`** | All figures as they appear in the final publication. |
 
 ---
 
-## Methodology Snapshot
+## Methodological Approach
 
-This project showcases a modern approach to statistical analysis in psychological science, including:
+This project showcases a modern, rigorous approach to quantitative analysis, highlighting the following skills:
 
-* **Bayesian Multilevel Modeling**: The core of the hypothesis testing relies on Bayesian binomial and beta regressions to model discounting measures, which are naturally bounded (i.e., proportions and choices). This approach provides robust estimates, particularly for complex interaction effects.
-* **Focused Hypothesis Testing**: Instead of an omnibus model, the analysis uses a series of planned contrasts to directly test the effect of age within each income group, and vice versa.
-* **Composite Measure Creation**: A composite z-score for discounting is calculated by combining measures from two different procedures (Adjusting-Amount and Monetary Choice Questionnaire) to provide a more reliable estimate of the underlying construct.
-* **Data Quality and Reliability**: The analysis begins with data quality checks, including fitting nonlinear models to group-level data and calculating within-procedure reliability correlations.
+* **Bayesian Hierarchical Modeling**: Implemented Bayesian generalized linear mixed-effects models (binomial and beta regressions) to accurately model the bounded nature of the outcome variables (choices and proportions) while accounting for the nested data structure (multiple observations per participant).
+* **Focused Hypothesis Testing**: Used a series of planned contrasts to directly test the theoretically-driven hypotheses, examining the effect of age within each income group and vice-versa.
+* **Latent Construct Estimation**: Created a composite z-score by standardizing and averaging measures from two distinct behavioral tasks, providing a more reliable and robust estimate of the underlying construct of delay discounting.
+* **Data Validation and Reliability**: The workflow begins with essential data quality checks, including assessing the fit of nonlinear models to group-level data and calculating within-procedure (alternate-forms) reliability.
 
 ---
 
-## Software and Execution
+## How to Reproduce This Analysis
 
-To run the analyses, you will need the appropriate software environment and the raw data from the OSF repository linked above.
+To run these analyses, first download the raw data from the OSF repository linked above and place it in the `/Analysis/` directory. Then, set up the appropriate software environment as described below.
 
 ### R Environment (`/Analysis/analysis.qmd`)
 
-* **Required Packages**: `readxl`, `minpack.lm`, `brms`, `tidybayes`, `bayestestR`, `dplyr`, `tidyr`, and others.
+* **Required Packages**: `brms`, `dplyr`, `tidybayes`, `readxl`, `minpack.lm`, and others listed in the script.
 * **Installation**:
     ```R
-    install.packages(c("readxl", "minpack.lm", "lme4", "glmmTMB", "multcomp", "brms", "tidybayes", "bayestestR", "psych", "dplyr", "tidyr", "stringr"))
+    install.packages(c("brms", "tidybayes", "bayestestR", "dplyr", "tidyr", "readxl", "minpack.lm"))
     ```
 
 ### Python Environment (`/Analysis/analysis.ipynb`)
 
-* **Required Packages**: `pandas`, `numpy`, `openpyxl`, `scipy`, `statsmodels`, `pymc`, `arviz`, `scikit-learn`.
+* **Required Packages**: `pymc`, `pandas`, `arviz`, `statsmodels`, `scipy`, `numpy`, `openpyxl`, `scikit-learn`.
 * **Installation**:
     ```bash
-    pip install pandas numpy openpyxl scipy statsmodels pymc arviz scikit-learn
+    pip install pymc pandas arviz statsmodels scipy numpy openpyxl scikit-learn
     ```
