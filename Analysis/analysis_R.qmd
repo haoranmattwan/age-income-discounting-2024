@@ -1,396 +1,747 @@
 ---
-title: "Age-Related Differences in Delay Discounting: Income Matters"
+title: "Replication Analysis: Income Moderates Age-Related Financial Patience"
+subtitle: "An R implementation of the findings from Wan et al. (2024), *Psychology and Aging*"
 author: "Haoran (Matt) Wan"
 date: "today"
 format: 
   html:
     toc: true
-    code-fold: true
+    code-fold: false
     self-contained: true
+    theme: cosmo
+    mainfont: "Garamond"
+execute:
+  warning: false
+  message: false
 engine: knitr
 ---
 
-## Introduction
+## Overview
 
-This document contains the R code to replicate the analyses from the publication:
+This document provides a complete, reproducible R script for the analyses presented in the following publication:
 
-> Wan, H., Myerson, J., Green, L., Strube, M. J., & Hale, S. (2024). Age-related differences in delay discounting: Income matters. *Psychology and Aging*. Advance online publication. https://doi.org/10.1037/pag0000818
+> Wan, H., Myerson, J., Green, L., Strube, M. J., & Hale, S. (2024). Age-related differences in delay discounting: Income matters. *Psychology and Aging*. Advance online publication. [https://doi.org/10.1037/pag0000818](https://doi.org/10.1037/pag0000818)
 
-The analyses test the "buffering hypothesis" by examining the interaction between age and income on delay discounting, using a series of focused Bayesian multilevel regressions.
+The study's central goal was to test a **"buffering hypothesis"**—the theory that the greater emotional stability associated with older age buffers individuals against the financial stress of scarcity, leading to more patient financial decisions compared to younger adults in the same low-income bracket.
 
-The data from this study are available at <https://osf.io/um68t/>.
+The data and original study materials are publicly available on the Open Science Framework at [https://osf.io/um68t/](https://osf.io/um68t/).
 
-## 1. Setup: Load Packages, Functions, and Process Data
+### Analysis Workflow
 
-This single chunk now contains all the necessary setup code. It loads the required R packages, defines the custom wrapper functions for the Bayesian models, and then loads and processes the raw data to create the final analysis dataframes.
+The analysis is structured in five sequential stages:
+
+1.  **Environment Setup**: Load all required R packages, define custom functions for modeling, and import the raw dataset.
+2.  **Data Processing & Validation**: Clean the raw data, perform data quality checks, and assess the reliability of the behavioral measures (Monetary Choice Questionnaire and Adjusting-Amount procedure).
+3.  **Hypothesis Testing 1 (Age Effects)**: Replicate the Bayesian multilevel models from Table 2 of the paper. This involves running focused contrasts to test the effect of age on financial patience within both low- and high-income groups.
+4.  **Hypothesis Testing 2 (Income Effects)**: Replicate the models from Table 3. These contrasts test the effect of income on financial patience within both younger and older adult groups.
+5.  **Composite Score Analysis**: Create a composite z-score combining both behavioral measures to verify the primary interaction effect and quantify the magnitude of the age difference in the low-income cohort.
 
 ```{r setup_and_process}
-#| message: false
-#| warning: false
+# Set global chunk options to suppress messages and warnings for a clean output
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, error = FALSE)
 
-# --- Load Packages ---
-library(readxl)
-library(minpack.lm)
-library(lme4)
-library(glmmTMB)
-library(multcomp)
-library(brms)
-library(tidybayes)
-library(bayestestR)
-library(psych) 
-library(dplyr)
-library(tidyr)
-library(stringr)
+# --- 1. SETUP: ENVIRONMENT AND HELPER FUNCTIONS ---
 
-# --- Custom Functions ---
-binomial_brm <- function(Formula, Data, File = NULL) {
-  brm(formula = Formula, 
-      family = binomial(), data = Data, 
-      prior = c(prior(cauchy(0, 10), class = Intercept), 
-                prior(cauchy(0, 2.5), class = b),
-                prior(cauchy(0, 2.5), class = sd)),
-      iter = 4000, refresh = 0, silent = 2, warmup = 2000, chains = 4, cores = 4, 
-      backend = "cmdstanr", control = list(adapt_delta=0.95, max_treedepth=10), 
-      file = File)
+# This section prepares the R environment for the analysis. It loads all 
+# necessary packages and defines custom functions to streamline the Bayesian 
+# modeling and results summarization, ensuring the code is both efficient and readable.
+
+# --- 1.1 Load R Packages ---
+
+# Load packages for data manipulation, modeling, and visualization.
+library(readxl)     # To read data from Excel files
+library(dplyr)      # For data manipulation and wrangling (part of tidyverse)
+library(tidyr)      # For tidying data (part of tidyverse)
+library(stringr)    # For string manipulation (part of tidyverse)
+library(psych)      # For psychological research tools, e.g., composite scores
+library(brms)       # For Bayesian Regression Models using Stan
+library(tidybayes)  # For tidying and visualizing Bayesian model output
+library(bayestestR) # For computing indices of model fit and posterior summaries
+library(minpack.lm) # For nonlinear model fitting
+
+# --- 1.2 Custom Functions ---
+
+#' @title Wrapper for Bayesian Binomial GLMM
+#' @description A helper function to fit a binomial mixed-effects model using brms.
+#'   It pre-sets weakly informative priors and MCMC parameters for consistency.
+#' @param model_formula A brms formula object.
+#' @param dataset The dataframe containing the variables in the formula.
+#' @param file_path Optional string to save the fitted model object.
+#' @return A fitted brms model object.
+binomial_brm <- function(model_formula, dataset, file_path = NULL) {
+  brm(
+    formula = model_formula, 
+    family = binomial(), # Specifies a logistic link function for binary outcome data
+    data = dataset, 
+    # Set weakly informative priors as described in the paper
+    prior = c(
+      prior(cauchy(0, 10), class = Intercept), 
+      prior(cauchy(0, 2.5), class = b),
+      prior(cauchy(0, 2.5), class = sd)
+    ),
+    iter = 4000,      # Total MCMC iterations per chain
+    warmup = 2000,    # Burn-in iterations to discard
+    chains = 4,       # Number of independent Markov chains
+    cores = 4,        # Number of CPU cores to use for parallel execution
+    backend = "cmdstanr", # Use the fast cmdstanr backend
+    control = list(adapt_delta = 0.95, max_treedepth = 10), # MCMC convergence settings
+    file = file_path, # Cache the model fit to save time on re-runs
+    refresh = 0,      # Suppress iteration progress messages
+    silent = 2        # Suppress Stan compilation messages
+  )
 }
-beta_brm <- function(Formula, Data, File = NULL) {
-  brm(formula = Formula, 
-      family = beta_family(), data = Data, 
-      prior = c(prior(normal(0, 100^100), class = Intercept), 
-                prior(cauchy(0, 2.5), class = b),
-                prior(cauchy(0, 2.5), class = sd)),
-      iter = 4000, refresh = 0, silent = 2, warmup = 2000, chains = 4, cores = 4, 
-      backend = "cmdstanr", control = list(adapt_delta=0.95, max_treedepth=10), 
-      file = File)
+
+#' @title Wrapper for Bayesian Beta GLMM
+#' @description A helper function to fit a beta mixed-effects model for proportional
+#'   data (i.e., values between 0 and 1), used here for Area Under the Curve.
+#' @param model_formula A brms formula object.
+#' @param dataset The dataframe containing the variables in the formula.
+#' @param file_path Optional string to save the fitted model object.
+#' @return A fitted brms model object.
+beta_brm <- function(model_formula, dataset, file_path = NULL) {
+  brm(
+    formula = model_formula, 
+    family = Beta(), # Specifies a beta distribution for proportional outcomes
+    data = dataset, 
+    # Set priors as described in the paper
+    prior = c(
+      prior(normal(0,100^100), class = Intercept), 
+      prior(cauchy(0, 2.5), class = b),
+      prior(cauchy(0, 2.5), class = sd)
+    ),
+    iter = 4000, warmup = 2000, chains = 4, cores = 4, 
+    backend = "cmdstanr", control = list(adapt_delta = 0.95, max_treedepth = 10), 
+    file = file_path,
+    refresh = 0, silent = 2
+  )
 }
-brm_summary <- function(brm_model, rownames = NULL) {
-  suppressWarnings(trans_brms <- brm_model |>
-                     gather_draws(`b_.*`, regex = T) |> select(c(.variable, .value)) |>
-                     group_by(.variable) |> 
-                     mutate(pd = ecdf(.value)(0),
-                            pd = ifelse(pd>=.5, pd, 1-pd),
-                            signif = ifelse(pd >= .975, "*"," ")) |> 
-                     group_by(.variable, pd, signif) |>
-                     median_hdi() |>
-                     select(c(.variable, .value, .lower, .upper, pd, signif)) |>
-                     mutate(.variable = factor(.variable, levels=as.data.frame(p_direction(brm_model))$Parameter)) |>
-                     arrange(.variable) |>
-                     mutate_at(c(".variable"), funs(str_replace(., "b_", ""))) |>
-                     mutate_at(c(".variable"), funs(str_replace(., "_c", ""))) |>
-                     mutate(across(.cols = -c(.variable,signif), ~round(.,3))) |>
-                     mutate(across(.cols = -c(.variable,signif), ~sprintf("%.3f", round(.,3)))) |>
-                     `colnames<-`(c("rowname","b","95% CI_l","95% CI_u","pd","signif")))
-  if (!is.null(rownames)) {
-    trans_brms <- trans_brms |> tibble::column_to_rownames() |> `rownames<-`(rownames)
+
+#' @title Summarize a brms Model Output
+#' @description A function to create a clean summary table from a brms model, 
+#'   calculating the median, 95% Highest Density Interval (HDI), and the 
+#'   Probability of Direction (pd) for each parameter.
+#' @param brm_model A fitted brms model object.
+#' @param param_names Optional vector of strings to rename the parameters for clarity.
+#' @return A formatted dataframe summarizing the model's posterior distributions.
+summarize_brm_model <- function(brm_model, param_names = NULL) {
+  
+  # Suppress warnings from internal steps of the pipe
+  suppressWarnings({
+    
+    summary_df <- brm_model |>
+      # Extract posterior draws for all regression coefficients (`b_...`)
+      gather_draws(`b_.*`, regex = TRUE) |> 
+      select(.variable, .value) |>
+      # Group by parameter to summarize each one
+      group_by(.variable) |> 
+      # Calculate Probability of Direction (pd), a Bayesian analog to p-value
+      mutate(
+        pd = ecdf(.value)(0),
+        pd = ifelse(pd >= 0.5, pd, 1 - pd),
+        significance = ifelse(pd >= 0.975, "*", " ")
+      ) |> 
+      # Group again to collapse draws into a summary
+      group_by(.variable, pd, significance) |>
+      # Calculate the posterior median and 95% Highest Density Interval
+      median_qi() |>
+      select(.variable, .value, .lower, .upper, pd, significance) |>
+      # Clean up parameter names for the final table
+      mutate(
+        .variable = str_replace(.variable, "b_", ""),
+        .variable = str_replace(.variable, "_c", "")
+      ) |>
+      # Format all numeric columns to three decimal places
+      mutate(across(where(is.numeric), ~sprintf("%.3f", .))) |>
+      # Rename columns for the final presentation
+      `colnames<-`(c("Parameter", "Median", "CI_lower", "CI_upper", "pd", "sig"))
+  })
+  
+  # If custom parameter names are provided, apply them
+  if (!is.null(param_names)) {
+    summary_df$Parameter <- param_names
   }
-  return(as.data.frame(trans_brms))
+  
+  return(as.data.frame(summary_df))
 }
 
-# --- Data Processing ---
-# Function to calculate Area under the Curve
-auc_func <- function(x, y) {
+#' @title Calculate Area Under the Curve
+#' @description Calculates the area under a curve using the trapezoidal rule.
+#'   Used to derive the Area under the Curve (AuC) measure of delay discounting.
+#' @param x A numeric vector of x-coordinates (e.g., delays).
+#' @param y A numeric vector of y-coordinates (e.g., subjective values).
+#' @return A single numeric value representing the area under the curve.
+calculate_auc <- function(x, y) {
+  # The formula sums the areas of trapezoids formed by adjacent points
   sum(diff(x) * (y[-1] + y[-length(y)])) / 2
 }
+```
 
-# Load raw data
-dat_adj_amt_raw <- read_excel("Manuscript/Resubmission2/Analysis/Data_AgeIncome.xlsx", sheet = 2)
-dat_mcq_raw <- read_excel("Manuscript/Resubmission2/Analysis/Data_AgeIncome.xlsx", sheet = 1) |>
+## Data Processing
+
+This section details the entire data processing pipeline. Raw data from two Excel sheets are loaded, cleaned, and merged. From this cleaned dataset, we derive:
+1.  **Group-level dataframes** for visualization and quality checks.
+2.  **Individual-level dataframes** containing the primary discounting scores (`AuC` and `Num_Choice`).
+3.  **Model-specific dataframes** with centered predictor variables for the hypothesis-testing regressions.
+4.  A **composite z-score dataframe** for analyzing the overall effect magnitude.
+
+```{r load_data}
+# --- 2. DATA IMPORT AND PROCESSING ---
+
+# This section loads the raw data, processes it into analysis-ready formats,
+# and creates specific dataframes for each statistical model.
+
+# --- 2.1 Load Raw Data ---
+
+# Load the two datasets from the Excel file:
+# 1. Monetary Choice Questionnaire (MCQ) data, in long format (one row per choice).
+# 2. Adjusting-Amount (Adj-Amt) data, in long format (one row per indifference point).
+# The file path is relative to the project's root directory.
+raw_mcq_data <- read_excel("Data_AgeIncome.xlsx", sheet = 1)
+raw_adj_amt_data <- read_excel("Data_AgeIncome.xlsx", sheet = 2)
+
+
+# --- 2.2 Process Behavioral Data ---
+
+# Create a lookup table with the fixed parameters for each of the 27 MCQ items.
+# This avoids hardcoding values and makes the code cleaner and less error-prone.
+mcq_item_parameters <- tibble(
+  Q_ID = 1:27,
+  # 'k' is the discounting parameter associated with each choice item
+  k = c(0.00016, 0.00600, 0.00600, 0.25000, 0.04100, 0.00040, 0.10000, 
+        0.10000, 0.00016, 0.00600, 0.25000, 0.00100, 0.00016, 0.04100, 
+        0.00250, 0.00250, 0.00040, 0.01600, 0.10000, 0.00040, 0.01600, 
+        0.00250, 0.04100, 0.00100, 0.01600, 0.00100, 0.25000),
+  # Amount block for the larger, delayed reward
+  Amount = c("$55", "$80", "$30", "$80", "$30", "$55", "$30", "$55", "$80", 
+             "$55", "$30", "$80", "$30", "$55", "$80", "$55", "$80", "$30", 
+             "$80", "$30", "$55", "$30", "$80", "$55", "$80", "$30", "$55")
+)
+
+# Join the parameters to the raw MCQ data
+mcq_data_with_params <- raw_mcq_data |>
+  left_join(mcq_item_parameters, by = "Q_ID") |>
   mutate(
-    # Assign the value of k for each question on the Kirby's MCQ (1999)
-    k      = case_when(Q_ID == 1 ~ 0.00016, Q_ID == 2 ~ 0.00600, Q_ID == 3 ~ 0.00600,
-                       Q_ID == 4 ~ 0.25000, Q_ID == 5 ~ 0.04100, Q_ID == 6 ~ 0.00040,
-                       Q_ID == 7 ~ 0.10000, Q_ID == 8 ~ 0.10000, Q_ID == 9 ~ 0.00016,
-                       Q_ID == 10 ~ 0.00600, Q_ID == 11 ~ 0.25000, Q_ID == 12 ~ 0.00100,
-                       Q_ID == 13 ~ 0.00016, Q_ID == 14 ~ 0.04100, Q_ID == 15 ~ 0.00250,
-                       Q_ID == 16 ~ 0.00250, Q_ID == 17 ~ 0.00040, Q_ID == 18 ~ 0.01600,
-                       Q_ID == 19 ~ 0.10000, Q_ID == 20 ~ 0.00040, Q_ID == 21 ~ 0.01600,
-                       Q_ID == 22 ~ 0.00250, Q_ID == 23 ~ 0.04100, Q_ID == 24 ~ 0.00100,
-                       Q_ID == 25 ~ 0.01600, Q_ID == 26 ~ 0.00100, Q_ID == 27 ~ 0.25000),
-    # Assign the amount of the delayed reward for each question
-    Amount = case_when(Q_ID == 1 ~ "$50-$60", Q_ID == 2 ~ "$75-$85", Q_ID == 3 ~ "$25-$35",
-                       Q_ID == 4 ~ "$75-$85", Q_ID == 5 ~ "$25-$35", Q_ID == 6 ~ "$50-$60",
-                       Q_ID == 7 ~ "$25-$35", Q_ID == 8 ~ "$50-$60", Q_ID == 9 ~ "$75-$85",
-                       Q_ID == 10 ~ "$50-$60", Q_ID == 11 ~ "$25-$35", Q_ID == 12 ~ "$75-$85",
-                       Q_ID == 13 ~ "$25-$35", Q_ID == 14 ~ "$50-$60", Q_ID == 15 ~ "$75-$85",
-                       Q_ID == 16 ~ "$50-$60", Q_ID == 17 ~ "$75-$85", Q_ID == 18 ~ "$25-$35",
-                       Q_ID == 19 ~ "$75-$85", Q_ID == 20 ~ "$25-$35", Q_ID == 21 ~ "$50-$60",
-                       Q_ID == 22 ~ "$25-$35", Q_ID == 23 ~ "$75-$85", Q_ID == 24 ~ "$50-$60",
-                       Q_ID == 25 ~ "$75-$85", Q_ID == 26 ~ "$25-$35", Q_ID == 27 ~ "$50-$60"),
-    Amount =  factor(Amount, level = c("$75-$85","$50-$60","$25-$35")))
+    Amount = factor(Amount, levels = c("$80", "$55", "$30"))
+  )
 
-# --- Create Group-Level Data Frames ---
-MCQ_grp_df <- dat_mcq_raw |>
-  mutate(
-    log_k = log(k),
-    Group = factor(Group, levels = c(1,3,2,4), labels = c("Younger, Lower-Income", "Older, Lower-Income", "Younger, Higher-Income", "Older, Higher-Income"))
-  ) |>
-  group_by(Group, Amount, log_k, k) |>
-  summarise(Prop = mean(Choice), .groups = 'drop')
-
-AdjAmt_grp_df <- dat_adj_amt_raw |>
-  mutate(
-    Group = factor(Group, levels = c(1,3,2,4), labels = c("Younger, Lower-Income", "Older, Lower-Income", "Younger, Higher-Income", "Older, Higher-Income")),
-    Amount = factor(Amount, levels = c("500", "80", "30"), labels = c("$500", "$80", "$30"))
-  ) |>
-  group_by(Group, Amount, Delay) |>
-  summarise(Mean_RSV = mean(RSV), .groups = 'drop')
-
-# Process Adj-Amt Data
-adj_amt_processed <- dat_adj_amt_raw |>
+# Calculate participant-level summary for the Adj-Amt procedure.
+# The primary measure is Area under the Curve (AuC).
+adj_amt_by_participant <- raw_adj_amt_data |>
+  # Exclude the 730-day delay, which was only used for the $500 amount,
+  # to make AuC comparable across all amount conditions.
   filter(Delay != 730) |>
   group_by(ID, Amount) |>
   summarise(
-    AuC = auc_func(Delay / max(Delay), RSV),
+    # Use our custom function to calculate AuC
+    auc = calculate_auc(x = Delay / max(Delay), y = RSV),
     .groups = 'drop'
-  ) |>
-  mutate(procedure = "aa")
+  )
 
-# Process MCQ Data
-mcq_processed <- dat_mcq_raw |>
+# Calculate participant-level summary for the MCQ procedure.
+# The primary measure is the number of times the delayed option was chosen.
+mcq_by_participant <- mcq_data_with_params |>
   group_by(ID, Amount) |>
   summarise(
-    Num_Choice = sum(Choice),
+    num_delayed_choices = sum(Choice),
     .groups = 'drop'
-  ) |>
-  mutate(procedure = "mcq")
-
-# Combine and create final analysis dataframes
-demographics <- distinct(dat_adj_amt_raw, ID, Group, Age, Gender, Education, HADS) |>
-  mutate(
-    Age_grp = ifelse(Group %in% c(1, 2), 0, 1), # 0=Younger, 1=Older
-    Income_grp = ifelse(Group %in% c(1, 3), 0, 1), # 0=Lower, 1=Higher
-    Education_grp = ifelse(Education <= 3, 0, 1), # 0=Below College, 1=College+
-    HADS = ifelse(HADS == "NA", NA, as.numeric(HADS))
   )
 
-MCQ_ID_df <- mcq_processed |> left_join(demographics, by = "ID")
-AdjAmt_ID_df <- adj_amt_processed |> left_join(demographics, by = "ID")
 
-# --- Create Model-Specific Dataframes with Centered Variables ---
-MCQ_mod1_df <- MCQ_ID_df |> filter(Amount != "$50-$60") |> mutate(Age_grp_c = Age_grp - mean(Age_grp), Income_grp_c = Income_grp - mean(Income_grp))
-AdjAmt_mod1_df <- AdjAmt_ID_df |> filter(Amount != 500) |> mutate(Age_grp_c = Age_grp - mean(Age_grp), Income_grp_c = Income_grp - mean(Income_grp))
+# --- 2.3 Create Demographics and Final Analysis Dataframes ---
 
-MCQ_mod2_df <- MCQ_ID_df |> filter(Amount != "$50-$60", !is.na(Education_grp)) |> mutate(across(c(Age_grp, Income_grp, Gender, Education_grp), ~ . - mean(., na.rm=TRUE), .names = "{.col}_c"))
-AdjAmt_mod2_df <- AdjAmt_ID_df |> filter(Amount != 500, !is.na(Education_grp)) |> mutate(across(c(Age_grp, Income_grp, Gender, Education_grp), ~ . - mean(., na.rm=TRUE), .names = "{.col}_c"))
-
-MCQ_mod3_df <- MCQ_ID_df |> filter(Amount != "$50-$60", !is.na(Education_grp), !is.na(HADS)) |> mutate(across(c(Age_grp, Income_grp, Gender, Education_grp), ~ . - mean(., na.rm=TRUE), .names = "{.col}_c"), HADS_c = (HADS - mean(HADS, na.rm=TRUE)) / (2*sd(HADS, na.rm=TRUE)))
-AdjAmt_mod3_df <- AdjAmt_ID_df |> filter(Amount != 500, !is.na(Education_grp), !is.na(HADS)) |> mutate(across(c(Age_grp, Income_grp, Gender, Education_grp), ~ . - mean(., na.rm=TRUE), .names = "{.col}_c"), HADS_c = (HADS - mean(HADS, na.rm=TRUE)) / (2*sd(HADS, na.rm=TRUE)))
-
-# --- Create the Composite z-Score DataFrame ---
-z_df <- bind_cols(
-    select(arrange(ungroup(subset(MCQ_ID_df, Amount != "$50-$60")), ID, desc(Amount)), 
-           c(ID, Age_grp, Income_grp, Age, Num_Choice)), 
-    select(ungroup(subset(AdjAmt_ID_df, Amount != 500)), c(AuC))
-  ) |>
+# Create a master demographics file by taking distinct participants from one of the raw files.
+demographics_data <- distinct(raw_adj_amt_data, ID, Group, Age, Gender, Education, HADS) |>
   mutate(
-    MCQ_z = (Num_Choice - mean(Num_Choice)) / sd(Num_Choice),
-    AdjAmt_z = (AuC - mean(AuC)) / sd(AuC)
-  ) |>
-  select(-c(Num_Choice, AuC)) |>
-  pivot_longer(names_to = "Procedure", values_to = "z_score", cols = c(MCQ_z, AdjAmt_z)) |>
-  group_by(ID) |> 
-  select(-Procedure) |> 
-  summarise(across(everything(), mean)) |> # Calculate mean z-score for each participant
+    # Create binary predictor variables for the regression models.
+    # 0 = reference group.
+    age_group = ifelse(Group %in% c(1, 2), 0, 1),      # 0=Younger, 1=Older
+    income_group = ifelse(Group %in% c(1, 3), 0, 1),    # 0=Lower, 1=Higher
+    education_group = ifelse(Education <= 3, 0, 1), # 0=Below College, 1=College+
+    # Convert HADS score from character to numeric, coercing "NA" strings to NA
+    hads_score = as.numeric(HADS)
+  )
+
+# Join the demographics data to the processed behavioral data.
+mcq_analysis_data <- mcq_by_participant |> left_join(demographics_data, by = "ID")
+adj_amt_analysis_data <- adj_amt_by_participant |> left_join(demographics_data, by = "ID")
+
+
+# --- 2.4 Prepare Model-Specific Dataframes with Centered Variables ---
+
+# Create separate dataframes for each of the three models specified in the paper.
+# This is necessary because covariates are added sequentially, and participants with
+# missing data for a new covariate (e.g., HADS) must be excluded.
+# Predictors are grand-mean centered to improve model convergence and make the 
+# intercept interpretable.
+
+# Model 1: Age x Income interaction
+mcq_model1_df <- mcq_analysis_data |> 
+  filter(Amount %in% c("$30", "$80")) |> 
   mutate(
-    Age_grp_c = Age_grp - mean(Age_grp),
-    Age_c = (Age - mean(Age)) / sd(Age),
-    Income_grp_c = Income_grp - mean(Income_grp)
+    age_group_c = age_group - mean(age_group), 
+    income_group_c = income_group - mean(income_group)
+  )
+
+adj_amt_model1_df <- adj_amt_analysis_data |> 
+  filter(Amount %in% c(30, 80)) |> 
+  mutate(
+    age_group_c = age_group - mean(age_group), 
+    income_group_c = income_group - mean(income_group)
+  )
+
+# Model 2: Add Education and Gender as covariates
+mcq_model2_df <- mcq_analysis_data |> 
+  filter(Amount %in% c("$30", "$80"), !is.na(education_group)) |> 
+  mutate(across(c(age_group, income_group, Gender, education_group), 
+                ~ . - mean(., na.rm = TRUE), .names = "{.col}_c"))
+
+adj_amt_model2_df <- adj_amt_analysis_data |> 
+  filter(Amount %in% c(30, 80), !is.na(education_group)) |> 
+  mutate(across(c(age_group, income_group, Gender, education_group), 
+                ~ . - mean(., na.rm = TRUE), .names = "{.col}_c"))
+
+# Model 3: Add HADS (psychological distress) as a covariate
+mcq_model3_df <- mcq_analysis_data |> 
+  filter(Amount %in% c("$30", "$80"), !is.na(education_group), !is.na(hads_score)) |> 
+  mutate(
+    across(c(age_group, income_group, Gender, education_group), 
+           ~ . - mean(., na.rm = TRUE), .names = "{.col}_c"),
+    # Standardize HADS score by dividing by 2*SD as in Gelman (2008)
+    hads_score_c = (hads_score - mean(hads_score, na.rm = TRUE)) / (2 * sd(hads_score, na.rm = TRUE))
+  )
+
+adj_amt_model3_df <- adj_amt_analysis_data |> 
+  filter(Amount %in% c(30, 80), !is.na(education_group), !is.na(hads_score)) |> 
+  mutate(
+    across(c(age_group, income_group, Gender, education_group), 
+           ~ . - mean(., na.rm = TRUE), .names = "{.col}_c"),
+    hads_score_c = (hads_score - mean(hads_score, na.rm = TRUE)) / (2 * sd(hads_score, na.rm = TRUE))
+  )
+
+# --- 2.5 Create the Composite z-Score DataFrame ---
+
+# This dataframe combines the two behavioral measures (MCQ choices and Adj-Amt AuC)
+# into a single, standardized score for each participant. This provides a robust,
+# holistic measure of discounting for examining the main hypotheses.
+
+# Isolate the two key measures for the common amounts ($30, $80)
+mcq_for_composite <- mcq_analysis_data |> filter(Amount %in% c("$30", "$80"))
+adj_amt_for_composite <- adj_amt_analysis_data |> filter(Amount %in% c(30, 80))
+
+# Combine, calculate z-scores, and average them for each participant
+composite_score_data <- bind_cols(
+    select(arrange(mcq_for_composite, ID, desc(Amount)),
+           ID, age_group, income_group, Age, num_delayed_choices), 
+    select(adj_amt_for_composite, auc)
+  ) |>
+  # Standardize each measure to have a mean of 0 and SD of 1
+  mutate(
+    mcq_z = (num_delayed_choices - mean(num_delayed_choices)) / sd(num_delayed_choices),
+    adj_amt_z = (auc - mean(auc)) / sd(auc)
+  ) |>
+  # Reshape data to long format to easily calculate the average z-score
+  pivot_longer(
+    cols = c(mcq_z, adj_amt_z),
+    names_to = "procedure",
+    values_to = "z_score"
+  ) |>
+  group_by(ID, age_group, income_group, Age) |> 
+  # Calculate the mean z-score for each participant
+  summarise(mean_z_score = mean(z_score), .groups = "drop") |>
+  # Add centered predictors for the final analysis
+  mutate(
+    age_group_c = age_group - mean(age_group),
+    income_group_c = income_group - mean(income_group),
+    age_c = as.numeric(scale(Age)) # `scale` is a convenient way to center and scale
   )
 ```
 
 ---
 
-## 2. Data Quality & Reliability Checks
+## 3. Data Quality & Reliability Checks
 
-This section replicates the initial analyses from the paper that establish the quality of the discounting data.
+Before testing the primary hypotheses, this section replicates the initial analyses from the paper that establish the quality and internal consistency of the behavioral data. These checks confirm two key points:
+
+1.  **Validity**: At the group level, the data conforms well to established mathematical models of discounting (logistic growth for MCQ data, hyperboloid for Adj-Amt data), as indicated by high $R^2$ values. This confirms that participants' choices were systematic and not random.
+2.  **Reliability**: At the individual level, participants' discounting behavior is consistent across different reward amounts within the same task. The high positive correlations demonstrate that individuals who discounted small rewards steeply also tended to discount large rewards steeply.
 
 ```{r quality_checks}
-#| tbl-cap: "Within-Procedure Reliability Correlations"
+#| tbl-cap: "Within-procedure reliability correlations for the MCQ (top) and Adj-Amt (bottom) tasks."
 
-# --- MCQ: Group-Level Logistic Growth Model Fit ---
+# --- 3.1 Group-Level Model Fit Assessment ---
+
+# The following analyses assess how well standard mathematical models of choice
+# describe the aggregated data from each of the four participant groups.
+# High R-squared values indicate that the data is well-behaved and systematic.
+
+# Fit a logistic growth model to the MCQ choice proportions for each group and amount.
 cat("--- MCQ: R-squared for Group-Level Logistic Growth Fits ---\n")
-MCQ_grp_df |>
-  group_by(Group, Amount) |>
-  do(
-     R2 = modelr::rsquare(nlsLM(Prop ~ 1 / (1 + exp( - (log_k - a) * (r) )), 
-                        data = ., start = list(a = -4, r = 1)), data =.)
+mcq_group_fits <- mcq_data_with_params |>
+  mutate(
+    # Create required variables for the group-level analysis
+    log_k = log(k),
+    group_label = factor(Group, levels = c(1,3,2,4), 
+                         labels = c("Younger, Lower-Income", "Older, Lower-Income", 
+                                    "Younger, Higher-Income", "Older, Higher-Income"))
   ) |>
-  as.data.frame() |> 
-  pivot_wider(names_from = Group, values_from = R2) |>
-  as.data.frame() |> print(digits = 3)
+  group_by(group_label, Amount, log_k) |>
+  summarise(prop_delayed = mean(Choice), .groups = 'drop') |>
+  group_by(group_label, Amount) |>
+  # For each group, calculate the R-squared from a non-linear least squares model
+  do(
+    R2 = modelr::rsquare(
+      nlsLM(prop_delayed ~ 1 / (1 + exp(-(log_k - a) * r)), 
+            data = ., start = list(a = -4, r = 1)),
+      data = .
+    )
+  ) |>
+  tidyr::unnest(R2) |>
+  pivot_wider(names_from = group_label, values_from = R2)
 
-# --- Adj-Amt: Group-Level Hyperboloid Model Fit ---
+print(as.data.frame(mcq_group_fits), digits = 3)
+
+
+# Fit a hyperboloid model to the Adj-Amt relative subjective values.
 cat("\n--- Adj-Amt: R-squared for Group-Level Hyperboloid Fits ---\n")
-AdjAmt_grp_df |>
-  group_by(Group, Amount) |>
-  do(
-     R2 = modelr::rsquare(nlsLM(Mean_RSV ~ 1 / (1 + (k) * Delay)^(s), 
-                        data = ., start = list(k = .1, s = 1)), data =.)
+adj_amt_group_fits <- raw_adj_amt_data |>
+  mutate(
+    group_label = factor(Group, levels = c(1,3,2,4), 
+                         labels = c("Younger, Lower-Income", "Older, Lower-Income", 
+                                    "Younger, Higher-Income", "Older, Higher-Income")),
+    Amount = factor(Amount)
   ) |>
-  as.data.frame() |>
-  pivot_wider(names_from = Group, values_from = R2) |>
-  as.data.frame() |> print(digits = 3)
+  group_by(group_label, Amount, Delay) |>
+  summarise(mean_rsv = mean(RSV), .groups = 'drop') |>
+  group_by(group_label, Amount) |>
+  do(
+    R2 = modelr::rsquare(
+      nlsLM(mean_rsv ~ 1 / (1 + k * Delay)^s, 
+            data = ., start = list(k = .1, s = 1)),
+      data = .
+    )
+  ) |>
+  tidyr::unnest(R2) |>
+  pivot_wider(names_from = group_label, values_from = R2)
+  
+print(as.data.frame(adj_amt_group_fits), digits = 3)
 
-# --- Within-Procedure Reliability (Correlations) ---
+# --- 3.2 Within-Procedure Reliability (Alternate-Forms Reliability) ---
+
+# These analyses check if participants' discounting rates are consistent across
+# different reward amounts within the same procedure. High correlations indicate
+# that the measures are reliable.
+
+# Calculate correlations for the number of delayed choices in the MCQ task.
 cat("\n--- MCQ: Within-Procedure Correlations (Number of Delayed Choices) ---\n")
-MCQ_ID_df |> 
-  pivot_wider(names_from = Amount, values_from = Num_Choice) |>
-  select(`$25-$35`, `$50-$60`, `$75-$85`) |>
-  cor() |>
-  print(digits = 2)
+mcq_reliability_cor <- mcq_by_participant |> 
+  pivot_wider(names_from = Amount, values_from = num_delayed_choices) |>
+  select(`$30`, `$55`, `$80`) |>
+  cor()
 
+print(mcq_reliability_cor, digits = 2)
+
+# Calculate correlations for the Area under the Curve in the Adj-Amt task.
 cat("\n--- Adj-Amt: Within-Procedure Correlations (AuC) ---\n")
-AdjAmt_ID_df |> 
-  pivot_wider(names_from = Amount, values_from = AuC) |>
-  select(`30`,`80`,`500`) |>
-  rename("$30" = "30", "$80" = "80", "$500" = "500") |>
-  cor() |>
-  print(digits = 2)
+adj_amt_reliability_cor <- adj_amt_by_participant |>  
+  pivot_wider(names_from = Amount, values_from = auc) |>
+  # Select and rename for a clean correlation matrix
+  select("$30" = `30`, "$80" = `80`, "$500" = `500`) |>
+  cor()
+
+print(adj_amt_reliability_cor, digits = 2)
 ```
 
 ---
 
-## 3. Hypothesis Testing: Effects of Age on Discounting
+## 4. Hypothesis Testing: Effects of Age on Discounting
 
-This section replicates the focused contrasts that test the buffering hypothesis by examining the effect of age at each level of income. The results correspond to **Table 2** in the publication.
+This section replicates the core analyses that test the **buffering hypothesis**. The key prediction is that **age will be associated with more patient decision-making (less discounting), but only for the low-income group**. No significant age effect is expected for the high-income group, who are not experiencing the same level of financial scarcity.
+
+To test this, a series of Bayesian multilevel models are run separately for each income group. The analysis proceeds in three stages, corresponding to **Table 2** in the publication:
+
+1.  **Model 1**: A baseline model testing the direct effect of age on discounting.
+2.  **Model 2**: An expanded model that adds demographic covariates (education, gender) to test if the age effect is robust.
+3.  **Model 3**: The full model, which adds psychological distress (HADS score) as a predictor. The buffering hypothesis predicts that controlling for distress should eliminate the age effect, suggesting distress is a key mechanism.
 
 ```{r age_effects}
-#| cache: true
-#| results: 'hold'
-#| tbl-cap: "Table 2 Replication: Effect of Age on Discounting"
+# --- 4.1 Model 1: Baseline Effect of Age ---
 
-# --- Model 1: Discounting = fn(Age) ---
-cat("--- Model 1: Age Effects ---\n")
-# Lower Income
-MCQ_LowInc_mod1 <- binomial_brm(bf(Num_Choice | trials(9) ~ Age_grp_c + (1|ID)), subset(MCQ_mod1_df, Income_grp == 0))
-AdjAmt_LowInc_mod1 <- beta_brm(bf(AuC ~ Age_grp_c + (1|ID)), subset(AdjAmt_mod1_df, Income_grp == 0))
-# Higher Income
-MCQ_HighInc_mod1 <- binomial_brm(bf(Num_Choice | trials(9) ~ Age_grp_c + (1|ID)), subset(MCQ_mod1_df, Income_grp == 1))
-AdjAmt_HighInc_mod1 <- beta_brm(bf(AuC ~ Age_grp_c + (1|ID)), subset(AdjAmt_mod1_df, Income_grp == 1))
+# Test the main prediction: is there an effect of age on discounting
+# for each income group, before controlling for other factors?
 
-print(brm_summary(MCQ_LowInc_mod1, c("Intercept", "Age")))
-print(brm_summary(AdjAmt_LowInc_mod1, c("Intercept", "Age")))
-print(brm_summary(MCQ_HighInc_mod1, c("Intercept", "Age")))
-print(brm_summary(AdjAmt_HighInc_mod1, c("Intercept", "Age")))
+cat("--- MODEL 1: AGE EFFECTS (LOW-INCOME GROUP) ---\n")
+# --- Low-Income Group ---
+mcq_age_low_inc_m1 <- binomial_brm(
+  model_formula = bf(num_delayed_choices | trials(9) ~ age_group_c + (1|ID)),
+  dataset = subset(mcq_model1_df, income_group == 0),
+  file_path = "rds/mcq_age_low_inc_m1"
+)
+print(summarize_brm_model(mcq_age_low_inc_m1))
 
-
-# --- Model 2: Discounting = fn(Age, Demographics) ---
-cat("\n--- Model 2: Age Effects Controlling for Demographics ---\n")
-# Lower Income
-MCQ_LowInc_mod2 <- binomial_brm(bf(Num_Choice | trials(9) ~ Age_grp_c + Education_grp_c + Gender_c + (1|ID)), subset(MCQ_mod2_df, Income_grp == 0))
-AdjAmt_LowInc_mod2 <- beta_brm(bf(AuC ~ Age_grp_c + Education_grp_c + Gender_c + (1|ID)), subset(AdjAmt_mod2_df, Income_grp == 0))
-# Higher Income
-MCQ_HighInc_mod2 <- binomial_brm(bf(Num_Choice | trials(9) ~ Age_grp_c + Education_grp_c + Gender_c + (1|ID)), subset(MCQ_mod2_df, Income_grp == 1))
-AdjAmt_HighInc_mod2 <- beta_brm(bf(AuC ~ Age_grp_c + Education_grp_c + Gender_c + (1|ID)), subset(AdjAmt_mod2_df, Income_grp == 1))
-
-print(brm_summary(MCQ_LowInc_mod2, c("Intercept", "Age", "Education", "Gender")))
-print(brm_summary(AdjAmt_LowInc_mod2, c("Intercept", "Age", "Education", "Gender")))
-print(brm_summary(MCQ_HighInc_mod2, c("Intercept", "Age", "Education", "Gender")))
-print(brm_summary(AdjAmt_HighInc_mod2, c("Intercept", "Age", "Education", "Gender")))
+adj_amt_age_low_inc_m1 <- beta_brm(
+  model_formula = bf(auc ~ age_group_c + (1|ID)),
+  dataset = subset(adj_amt_model1_df, income_group == 0),
+  file_path = "rds/adj_amt_age_low_inc_m1"
+)
+print(summarize_brm_model(adj_amt_age_low_inc_m1))
 
 
-# --- Model 3: Discounting = fn(Age, Demographics, Distress) ---
-cat("\n--- Model 3: Age Effects Controlling for Demographics and Distress ---\n")
-# Lower Income
-MCQ_LowInc_mod3 <- binomial_brm(bf(Num_Choice | trials(9) ~ Age_grp_c + Education_grp_c + Gender_c + HADS_c + (1|ID)), subset(MCQ_mod3_df, Income_grp == 0))
-AdjAmt_LowInc_mod3 <- beta_brm(bf(AuC ~ Age_grp_c + Education_grp_c + Gender_c + HADS_c + (1|ID)), subset(AdjAmt_mod3_df, Income_grp == 0))
-# Higher Income
-MCQ_HighInc_mod3 <- binomial_brm(bf(Num_Choice | trials(9) ~ Age_grp_c + Education_grp_c + Gender_c + HADS_c + (1|ID)), subset(MCQ_mod3_df, Income_grp == 1))
-AdjAmt_HighInc_mod3 <- beta_brm(bf(AuC ~ Age_grp_c + Education_grp_c + Gender_c + HADS_c + (1|ID)), subset(AdjAmt_mod3_df, Income_grp == 1))
+cat("\n--- MODEL 1: AGE EFFECTS (HIGH-INCOME GROUP) ---\n")
+# --- High-Income Group ---
+mcq_age_high_inc_m1 <- binomial_brm(
+  model_formula = bf(num_delayed_choices | trials(9) ~ age_group_c + (1|ID)),
+  dataset = subset(mcq_model1_df, income_group == 1),
+  file_path = "rds/mcq_age_high_inc_m1"
+)
+print(summarize_brm_model(mcq_age_high_inc_m1))
 
-print(brm_summary(MCQ_LowInc_mod3, c("Intercept", "Age", "Education", "Gender", "Distress")))
-print(brm_summary(AdjAmt_LowInc_mod3, c("Intercept", "Age", "Education", "Gender", "Distress")))
-print(brm_summary(MCQ_HighInc_mod3, c("Intercept", "Age", "Education", "Gender", "Distress")))
-print(brm_summary(AdjAmt_HighInc_mod3, c("Intercept", "Age", "Education", "Gender", "Distress")))
+adj_amt_age_high_inc_m1 <- beta_brm(
+  model_formula = bf(auc ~ age_group_c + (1|ID)),
+  dataset = subset(adj_amt_model1_df, income_group == 1),
+  file_path = "rds/adj_amt_age_high_inc_m1"
+)
+print(summarize_brm_model(adj_amt_age_high_inc_m1))
+
+
+# --- 4.2 Model 2: Controlling for Demographics ---
+
+# Test if the age effect persists after accounting for education and gender.
+
+cat("\n\n--- MODEL 2: AGE EFFECTS CONTROLLING FOR DEMOGRAPHICS (LOW-INCOME GROUP) ---\n")
+# --- Low-Income Group ---
+mcq_age_low_inc_m2 <- binomial_brm(
+  model_formula = bf(num_delayed_choices | trials(9) ~ age_group_c + education_group_c + Gender_c + (1|ID)),
+  dataset = subset(mcq_model2_df, income_group == 0),
+  file_path = "rds/mcq_age_low_inc_m2"
+)
+print(summarize_brm_model(mcq_age_low_inc_m2))
+
+adj_amt_age_low_inc_m2 <- beta_brm(
+  model_formula = bf(auc ~ age_group_c + education_group_c + Gender_c + (1|ID)),
+  dataset = subset(adj_amt_model2_df, income_group == 0),
+  file_path = "rds/adj_amt_age_low_inc_m2"
+)
+print(summarize_brm_model(adj_amt_age_low_inc_m2))
+
+
+cat("\n--- MODEL 2: AGE EFFECTS CONTROLLING FOR DEMOGRAPHICS (HIGH-INCOME GROUP) ---\n")
+# --- High-Income Group ---
+mcq_age_high_inc_m2 <- binomial_brm(
+  model_formula = bf(num_delayed_choices | trials(9) ~ age_group_c + education_group_c + Gender_c + (1|ID)),
+  dataset = subset(mcq_model2_df, income_group == 1),
+  file_path = "rds/mcq_age_high_inc_m2"
+)
+print(summarize_brm_model(mcq_age_high_inc_m2))
+
+adj_amt_age_high_inc_m2 <- beta_brm(
+  model_formula = bf(auc ~ age_group_c + education_group_c + Gender_c + (1|ID)),
+  dataset = subset(adj_amt_model2_df, income_group == 1),
+  file_path = "rds/adj_amt_age_high_inc_m2"
+)
+print(summarize_brm_model(adj_amt_age_high_inc_m2))
+
+
+# --- 4.3 Model 3: Controlling for Psychological Distress ---
+
+# Test if the age effect is statistically mediated by distress. If the age
+# coefficient becomes non-significant here, it supports the buffering hypothesis.
+
+cat("\n\n--- MODEL 3: AGE EFFECTS CONTROLLING FOR DEMOGRAPHICS & DISTRESS (LOW-INCOME GROUP) ---\n")
+# --- Low-Income Group ---
+mcq_age_low_inc_m3 <- binomial_brm(
+  model_formula = bf(num_delayed_choices | trials(9) ~ age_group_c + education_group_c + Gender_c + hads_score_c + (1|ID)),
+  dataset = subset(mcq_model3_df, income_group == 0),
+  file_path = "rds/mcq_age_low_inc_m3"
+)
+print(summarize_brm_model(mcq_age_low_inc_m3))
+
+adj_amt_age_low_inc_m3 <- beta_brm(
+  model_formula = bf(auc ~ age_group_c + education_group_c + Gender_c + hads_score_c + (1|ID)),
+  dataset = subset(adj_amt_model3_df, income_group == 0),
+  file_path = "rds/adj_amt_age_low_inc_m3"
+)
+print(summarize_brm_model(adj_amt_age_low_inc_m3))
+
+
+cat("\n--- MODEL 3: AGE EFFECTS CONTROLLING FOR DEMOGRAPHICS & DISTRESS (HIGH-INCOME GROUP) ---\n")
+# --- High-Income Group ---
+mcq_age_high_inc_m3 <- binomial_brm(
+  model_formula = bf(num_delayed_choices | trials(9) ~ age_group_c + education_group_c + Gender_c + hads_score_c + (1|ID)),
+  dataset = subset(mcq_model3_df, income_group == 1),
+  file_path = "rds/mcq_age_high_inc_m3"
+)
+print(summarize_brm_model(mcq_age_high_inc_m3))
+
+adj_amt_age_high_inc_m3 <- beta_brm(
+  model_formula = bf(auc ~ age_group_c + education_group_c + Gender_c + hads_score_c + (1|ID)),
+  dataset = subset(adj_amt_model3_df, income_group == 1),
+  file_path = "rds/adj_amt_age_high_inc_m3"
+)
+print(summarize_brm_model(adj_amt_age_high_inc_m3))
 ```
 
 ---
 
-## 4. Hypothesis Testing: Effects of Income on Discounting
+## 5. Hypothesis Testing: Effects of Income on Discounting
 
-This section replicates the complementary focused contrasts that test the effect of income at each level of age. The results correspond to **Table 3** in the publication.
+This section replicates the complementary analyses that provide a second test of the **buffering hypothesis**. The prediction here is the inverse of the previous section: **higher income will be associated with more patient decision-making, but only for the younger group**. Because older adults are already "buffered" by their greater emotional stability, their decision-making should be less influenced by income differences.
+
+To test this, models are run separately for each age group to examine the effect of income. The analysis proceeds in two stages, corresponding to **Table 3** in the publication:
+
+1.  **Model 1**: A baseline model testing the direct effect of income on discounting.
+2.  **Model 2**: An expanded model that adds demographic covariates (education, gender) to test the robustness of the income effect.
 
 ```{r income_effects}
-#| cache: true
-#| results: 'hold'
+# --- 5.1 Model 1: Baseline Effect of Income ---
 
-#| cache: true
-#| results: 'hold'
-#| tbl-cap: "Table 3 Replication: Effect of Income on Discounting"
+# Test the main prediction: does higher income lead to less discounting,
+# and is this effect present only for younger adults?
 
-# --- Model 1: Discounting = fn(Income) ---
-cat("--- Model 1: Income Effects ---\n")
-# Younger
-MCQ_Young_mod1 <- binomial_brm(bf(Num_Choice | trials(9) ~ Income_grp_c + (1|ID)), subset(MCQ_mod1_df, Age_grp == 0))
-AdjAmt_Young_mod1 <- beta_brm(bf(AuC ~ Income_grp_c + (1|ID)), subset(AdjAmt_mod1_df, Age_grp == 0))
-# Older
-MCQ_Old_mod1 <- binomial_brm(bf(Num_Choice | trials(9) ~ Income_grp_c + (1|ID)), subset(MCQ_mod1_df, Age_grp == 1))
-AdjAmt_Old_mod1 <- beta_brm(bf(AuC ~ Income_grp_c + (1|ID)), subset(AdjAmt_mod1_df, Age_grp == 1))
+cat("--- MODEL 1: INCOME EFFECTS (YOUNGER ADULTS) ---\n")
+# --- Younger Adults ---
+mcq_income_younger_m1 <- binomial_brm(
+  model_formula = bf(num_delayed_choices | trials(9) ~ income_group_c + (1|ID)),
+  dataset = subset(mcq_model1_df, age_group == 0),
+  file_path = "rds/mcq_income_younger_m1"
+)
+print(summarize_brm_model(mcq_income_younger_m1))
 
-print(brm_summary(MCQ_Young_mod1, c("Intercept", "Income")))
-print(brm_summary(AdjAmt_Young_mod1, c("Intercept", "Income")))
-print(brm_summary(MCQ_Old_mod1, c("Intercept", "Income")))
-print(brm_summary(AdjAmt_Old_mod1, c("Intercept", "Income")))
+adj_amt_income_younger_m1 <- beta_brm(
+  model_formula = bf(auc ~ income_group_c + (1|ID)),
+  dataset = subset(adj_amt_model1_df, age_group == 0),
+  file_path = "rds/adj_amt_income_younger_m1"
+)
+print(summarize_brm_model(adj_amt_income_younger_m1))
 
-# --- Model 2: Discounting = fn(Income, Demographics) ---
-cat("\n--- Model 2: Income Effects Controlling for Demographics ---\n")
-# Younger
-MCQ_Young_mod2 <- binomial_brm(bf(Num_Choice | trials(9) ~ Income_grp_c + Education_grp_c + Gender_c + (1|ID)), subset(MCQ_mod2_df, Age_grp == 0))
-AdjAmt_Young_mod2 <- beta_brm(bf(AuC ~ Income_grp_c + Education_grp_c + Gender_c + (1|ID)), subset(AdjAmt_mod2_df, Age_grp == 0))
-# Older
-MCQ_Old_mod2 <- binomial_brm(bf(Num_Choice | trials(9) ~ Income_grp_c + Education_grp_c + Gender_c + (1|ID)), subset(MCQ_mod2_df, Age_grp == 1))
-AdjAmt_Old_mod2 <- beta_brm(bf(AuC ~ Income_grp_c + Education_grp_c + Gender_c + (1|ID)), subset(AdjAmt_mod2_df, Age_grp == 1))
 
-print(brm_summary(MCQ_Young_mod2, c("Intercept", "Income", "Education", "Gender")))
-print(brm_summary(AdjAmt_Young_mod2, c("Intercept", "Income", "Education", "Gender")))
-print(brm_summary(MCQ_Old_mod2, c("Intercept", "Income", "Education", "Gender")))
-print(brm_summary(AdjAmt_Old_mod2, c("Intercept", "Income", "Education", "Gender")))
+cat("\n--- MODEL 1: INCOME EFFECTS (OLDER ADULTS) ---\n")
+# --- Older Adults ---
+mcq_income_older_m1 <- binomial_brm(
+  model_formula = bf(num_delayed_choices | trials(9) ~ income_group_c + (1|ID)),
+  dataset = subset(mcq_model1_df, age_group == 1),
+  file_path = "rds/mcq_income_older_m1"
+)
+print(summarize_brm_model(mcq_income_older_m1))
+
+adj_amt_income_older_m1 <- beta_brm(
+  model_formula = bf(auc ~ income_group_c + (1|ID)),
+  dataset = subset(adj_amt_model1_df, age_group == 1),
+  file_path = "rds/adj_amt_income_older_m1"
+)
+print(summarize_brm_model(adj_amt_income_older_m1))
+
+
+# --- 5.2 Model 2: Controlling for Demographics ---
+
+# Test if the income effect persists after accounting for education and gender.
+
+cat("\n\n--- MODEL 2: INCOME EFFECTS CONTROLLING FOR DEMOGRAPHICS (YOUNGER ADULTS) ---\n")
+# --- Younger Adults ---
+mcq_income_younger_m2 <- binomial_brm(
+  model_formula = bf(num_delayed_choices | trials(9) ~ income_group_c + education_group_c + Gender_c + (1|ID)),
+  dataset = subset(mcq_model2_df, age_group == 0),
+  file_path = "rds/mcq_income_younger_m2"
+)
+print(summarize_brm_model(mcq_income_younger_m2))
+
+adj_amt_income_younger_m2 <- beta_brm(
+  model_formula = bf(auc ~ income_group_c + education_group_c + Gender_c + (1|ID)),
+  dataset = subset(adj_amt_model2_df, age_group == 0),
+  file_path = "rds/adj_amt_income_younger_m2"
+)
+print(summarize_brm_model(adj_amt_income_younger_m2))
+
+
+cat("\n--- MODEL 2: INCOME EFFECTS CONTROLLING FOR DEMOGRAPHICS (OLDER ADULTS) ---\n")
+# --- Older Adults ---
+mcq_income_older_m2 <- binomial_brm(
+  model_formula = bf(num_delayed_choices | trials(9) ~ income_group_c + education_group_c + Gender_c + (1|ID)),
+  dataset = subset(mcq_model2_df, age_group == 1),
+  file_path = "rds/mcq_income_older_m2"
+)
+print(summarize_brm_model(mcq_income_older_m2))
+
+adj_amt_income_older_m2 <- beta_brm(
+  model_formula = bf(auc ~ income_group_c + education_group_c + Gender_c + (1|ID)),
+  dataset = subset(adj_amt_model2_df, age_group == 1),
+  file_path = "rds/adj_amt_income_older_m2"
+)
+print(summarize_brm_model(adj_amt_income_older_m2))
 ```
 
 ---
 
-## 5. Association with Composite Discounting Measure
+## 6. Composite Score Analysis & Effect Magnitudes
 
-The following analyses use the composite discounting measure (`z_df`) to evaluate the correlations between Age Group and z-scores for each Income Group, and between Income Group and z-scores for each Age Group.
+The final analyses use the composite z-score—a single, robust measure that combines data from both the MCQ and Adj-Amt procedures—to provide a holistic test of the buffering hypothesis.
+
+First, we replicate the focused correlation tests from the paper. As predicted, we expect to find a significant positive correlation between age and financial patience (higher z-score) **only in the low-income group**. Conversely, we expect a significant positive correlation between income and financial patience **only in the younger group**.
+
+Second, we quantify the magnitude of these effects using linear regression. This moves beyond statistical significance to understand the practical size of the age effect among low-income individuals, corresponding to the final analyses in the publication's "Discussion" section.
 
 ```{r zscore_correlations}
-#| tbl-cap: "Correlations with Composite z-Score"
+# --- 6.1 Focused Correlation Tests with Composite Score ---
 
-# Correlation between Age Group and z-score for each Income Group
-cat("--- Age Effect on z-score within each Income Group ---\n")
-cor.test(subset(z_df, Income_grp == 0)$z_score, subset(z_df, Income_grp == 0)$Age_grp) # Lower Income
-cor.test(subset(z_df, Income_grp == 1)$z_score, subset(z_df, Income_grp == 1)$Age_grp) # Higher Income
+# Use the composite z-score to perform the two key hypothesis tests in a 
+# single, tidy analysis.
 
-# Correlation between Income Group and z-score for each Age Group
-cat("\n--- Income Effect on z-score within each Age Group ---\n")
-cor.test(subset(z_df, Age_grp == 0)$z_score, subset(z_df, Age_grp == 0)$Income_grp) # Younger
-cor.test(subset(z_df, Age_grp == 1)$z_score, subset(z_df, Age_grp == 1)$Income_grp) # Older
-```
+# Test 1: Correlation between Age and Discounting within each Income Group
+cat("--- Correlation of Age Group with Discounting z-score ---\n")
+age_correlations <- composite_score_data |>
+  group_by(income_group) |>
+  summarise(broom::tidy(cor.test(mean_z_score, age_group))) |>
+  mutate(income_group = ifelse(income_group == 0, "Low-Income", "High-Income")) |>
+  select(Group = income_group, Correlation = estimate, p_value = p.value)
 
-## 6. The Magnitude of the Age Difference
+print(age_correlations, digits = 3)
 
-These final analyses use the composite discounting measure to examine the magnitude of the effects of Age and Income on discounting.
+# Test 2: Correlation between Income and Discounting within each Age Group
+cat("\n--- Correlation of Income Group with Discounting z-score ---\n")
+income_correlations <- composite_score_data |>
+  group_by(age_group) |>
+  summarise(broom::tidy(cor.test(mean_z_score, income_group))) |>
+  mutate(age_group = ifelse(age_group == 0, "Younger", "Older")) |>
+  select(Group = age_group, Correlation = estimate, p_value = p.value)
 
-```{r zscore_lm}
-#| tbl-cap: "Linear Models on Composite z-Score"
+print(income_correlations, digits = 3)
 
-# Mean z_score for each group
-cat("--- Mean Composite z-Score by Group ---\n")
-z_df |>
-  group_by(Age_grp, Income_grp) |>
-  summarise(mean_zscore = mean(z_score), .groups = 'drop') |>
+
+# --- 6.2 Quantifying Effect Magnitudes with Linear Models ---
+
+# These final models use the composite z-score to quantify the size of the 
+# observed effects.
+
+# Calculate and display the mean z-score for each of the four groups.
+cat("\n\n--- Mean Composite z-Score by Group ---\n")
+composite_score_data |>
+  group_by(age_group, income_group) |>
+  summarise(mean_z_score = mean(mean_z_score), .groups = 'drop') |>
   mutate(
-    Age_grp = ifelse(Age_grp == 0, "Younger", "Older"),
-    Income_grp = ifelse(Income_grp == 0, "Lower-Income", "Higher-Income")
+    Age_Group = ifelse(age_group == 0, "Younger", "Older"),
+    Income_Group = ifelse(income_group == 0, "Low-Income", "High-Income")
   ) |>
-  print()
+  select(Age_Group, Income_Group, mean_z_score) |>
+  print(digits = 3)
 
-# z-score = fn[Age, Income, Age x Income]
-cat("\n--- Full Model: z-score ~ Age * Income ---\n")
-summary(lm(z_score ~ (Age_grp_c + Income_grp_c)^2, data = z_df))
+# Fit a full linear model to test for an interaction between age and income.
+# A significant interaction confirms that the effect of age depends on income level.
+cat("\n--- Full Model: z_score ~ Age * Income ---\n")
+full_interaction_model <- lm(mean_z_score ~ age_group_c * income_group_c, 
+                             data = composite_score_data)
+summary(full_interaction_model)
 
-# Age effect in each of the two income groups using continuous age
-cat("\n--- Age Effect on z-score within each Income Group (Continuous Age) ---\n")
-summary(lm(z_score ~ Age, data = subset(z_df, Income_grp == 0))) # Lower Income
-summary(lm(z_score ~ Age, data = subset(z_df, Income_grp == 1))) # Higher Income
+# Finally, use continuous age (rather than the binary group) to estimate the
+# year-over-year change in discounting for each income group separately.
+cat("\n--- Age as a Continuous Predictor of z-score ---\n")
+# For the low-income group, we expect a significant positive slope.
+cat("Low-Income Group:\n")
+low_income_age_slope <- lm(mean_z_score ~ Age, 
+                           data = subset(composite_score_data, income_group == 0))
+summary(low_income_age_slope)
+
+# For the high-income group, we expect the slope to be non-significant.
+cat("\nHigh-Income Group:\n")
+high_income_age_slope <- lm(mean_z_score ~ Age, 
+                            data = subset(composite_score_data, income_group == 1))
+summary(high_income_age_slope)
 ```
