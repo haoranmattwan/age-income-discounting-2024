@@ -44,7 +44,7 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE, error = FALSE)
 
 # This section prepares the R environment for the analysis. It loads all 
 # necessary packages and defines custom functions to streamline the Bayesian 
-# modeling and results summarization, ensuring the code is both efficient and readable.
+# modeling and results summarization.
 
 # --- 1.1 Load R Packages ---
 
@@ -179,6 +179,7 @@ calculate_auc <- function(x, y) {
 ## Data Processing
 
 This section details the entire data processing pipeline. Raw data from two Excel sheets are loaded, cleaned, and merged. From this cleaned dataset, we derive:
+
 1.  **Group-level dataframes** for visualization and quality checks.
 2.  **Individual-level dataframes** containing the primary discounting scores (`AuC` and `Num_Choice`).
 3.  **Model-specific dataframes** with centered predictor variables for the hypothesis-testing regressions.
@@ -198,7 +199,6 @@ This section details the entire data processing pipeline. Raw data from two Exce
 # The file path is relative to the project's root directory.
 raw_mcq_data <- read_excel("Data_AgeIncome.xlsx", sheet = 1)
 raw_adj_amt_data <- read_excel("Data_AgeIncome.xlsx", sheet = 2)
-
 
 # --- 2.2 Process Behavioral Data ---
 
@@ -246,7 +246,6 @@ mcq_by_participant <- mcq_data_with_params |>
     .groups = 'drop'
   )
 
-
 # --- 2.3 Create Demographics and Final Analysis Dataframes ---
 
 # Create a master demographics file by taking distinct participants from one of the raw files.
@@ -264,7 +263,6 @@ demographics_data <- distinct(raw_adj_amt_data, ID, Group, Age, Gender, Educatio
 # Join the demographics data to the processed behavioral data.
 mcq_analysis_data <- mcq_by_participant |> left_join(demographics_data, by = "ID")
 adj_amt_analysis_data <- adj_amt_by_participant |> left_join(demographics_data, by = "ID")
-
 
 # --- 2.4 Prepare Model-Specific Dataframes with Centered Variables ---
 
@@ -352,7 +350,7 @@ composite_score_data <- bind_cols(
   mutate(
     age_group_c = age_group - mean(age_group),
     income_group_c = income_group - mean(income_group),
-    age_c = as.numeric(scale(Age)) # `scale` is a convenient way to center and scale
+    age_c = as.numeric(scale(Age))
   )
 ```
 
@@ -366,8 +364,6 @@ Before testing the primary hypotheses, this section replicates the initial analy
 2.  **Reliability**: At the individual level, participants' discounting behavior is consistent across different reward amounts within the same task. The high positive correlations demonstrate that individuals who discounted small rewards steeply also tended to discount large rewards steeply.
 
 ```{r quality_checks}
-#| tbl-cap: "Within-procedure reliability correlations for the MCQ (top) and Adj-Amt (bottom) tasks."
-
 # --- 3.1 Group-Level Model Fit Assessment ---
 
 # The following analyses assess how well standard mathematical models of choice
@@ -399,7 +395,6 @@ mcq_group_fits <- mcq_data_with_params |>
   pivot_wider(names_from = group_label, values_from = R2)
 
 print(as.data.frame(mcq_group_fits), digits = 3)
-
 
 # Fit a hyperboloid model to the Adj-Amt relative subjective values.
 cat("\n--- Adj-Amt: R-squared for Group-Level Hyperboloid Fits ---\n")
@@ -485,7 +480,6 @@ adj_amt_age_low_inc_m1 <- beta_brm(
 )
 print(summarize_brm_model(adj_amt_age_low_inc_m1))
 
-
 cat("\n--- MODEL 1: AGE EFFECTS (HIGH-INCOME GROUP) ---\n")
 # --- High-Income Group ---
 mcq_age_high_inc_m1 <- binomial_brm(
@@ -501,7 +495,6 @@ adj_amt_age_high_inc_m1 <- beta_brm(
   file_path = "rds/adj_amt_age_high_inc_m1"
 )
 print(summarize_brm_model(adj_amt_age_high_inc_m1))
-
 
 # --- 4.2 Model 2: Controlling for Demographics ---
 
@@ -523,7 +516,6 @@ adj_amt_age_low_inc_m2 <- beta_brm(
 )
 print(summarize_brm_model(adj_amt_age_low_inc_m2))
 
-
 cat("\n--- MODEL 2: AGE EFFECTS CONTROLLING FOR DEMOGRAPHICS (HIGH-INCOME GROUP) ---\n")
 # --- High-Income Group ---
 mcq_age_high_inc_m2 <- binomial_brm(
@@ -539,7 +531,6 @@ adj_amt_age_high_inc_m2 <- beta_brm(
   file_path = "rds/adj_amt_age_high_inc_m2"
 )
 print(summarize_brm_model(adj_amt_age_high_inc_m2))
-
 
 # --- 4.3 Model 3: Controlling for Psychological Distress ---
 
@@ -561,7 +552,6 @@ adj_amt_age_low_inc_m3 <- beta_brm(
   file_path = "rds/adj_amt_age_low_inc_m3"
 )
 print(summarize_brm_model(adj_amt_age_low_inc_m3))
-
 
 cat("\n--- MODEL 3: AGE EFFECTS CONTROLLING FOR DEMOGRAPHICS & DISTRESS (HIGH-INCOME GROUP) ---\n")
 # --- High-Income Group ---
@@ -613,7 +603,6 @@ adj_amt_income_younger_m1 <- beta_brm(
 )
 print(summarize_brm_model(adj_amt_income_younger_m1))
 
-
 cat("\n--- MODEL 1: INCOME EFFECTS (OLDER ADULTS) ---\n")
 # --- Older Adults ---
 mcq_income_older_m1 <- binomial_brm(
@@ -629,7 +618,6 @@ adj_amt_income_older_m1 <- beta_brm(
   file_path = "rds/adj_amt_income_older_m1"
 )
 print(summarize_brm_model(adj_amt_income_older_m1))
-
 
 # --- 5.2 Model 2: Controlling for Demographics ---
 
@@ -650,7 +638,6 @@ adj_amt_income_younger_m2 <- beta_brm(
   file_path = "rds/adj_amt_income_younger_m2"
 )
 print(summarize_brm_model(adj_amt_income_younger_m2))
-
 
 cat("\n--- MODEL 2: INCOME EFFECTS CONTROLLING FOR DEMOGRAPHICS (OLDER ADULTS) ---\n")
 # --- Older Adults ---
@@ -704,7 +691,6 @@ income_correlations <- composite_score_data |>
   select(Group = age_group, Correlation = estimate, p_value = p.value)
 
 print(income_correlations, digits = 3)
-
 
 # --- 6.2 Quantifying Effect Magnitudes with Linear Models ---
 

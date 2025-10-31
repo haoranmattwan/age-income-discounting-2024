@@ -29,12 +29,12 @@ The analysis employs a series of focused Bayesian hierarchical models to provide
 
 ## Methodological Approach
 
-This project showcases a modern, rigorous approach to quantitative analysis, highlighting the following skills:
+The analysis uses a multi-step workflow to test the study's primary hypotheses while ensuring the validity of the data and measures.
 
-* **Bayesian Hierarchical Modeling**: Implemented Bayesian generalized linear mixed-effects models (binomial and beta regressions) to accurately model the bounded nature of the outcome variables (choices and proportions) while accounting for the nested data structure (multiple observations per participant).
-* **Focused Hypothesis Testing**: Used a series of planned contrasts to directly test the theoretically-driven hypotheses, examining the effect of age within each income group and vice-versa.
-* **Latent Construct Estimation**: Created a composite z-score by standardizing and averaging measures from two distinct behavioral tasks, providing a more reliable and robust estimate of the underlying construct of delay discounting.
-* **Data Validation and Reliability**: The workflow begins with essential data quality checks, including assessing the fit of nonlinear models to group-level data and calculating within-procedure (alternate-forms) reliability.
+* **Data Validation and Reliability**: The workflow begins with essential data quality checks, including fitting nonlinear models to group-level data to confirm systematic behavioral patterns and calculating within-procedure (alternate-forms) reliability correlations to ensure the measures are internally consistent.
+* **Bayesian Hierarchical Modeling**: The core of the analysis relies on Bayesian generalized linear mixed-effects models (binomial and beta regressions) to accurately model the bounded nature of the outcome variables (choices and proportions) while accounting for the nested data structure (multiple observations per participant).
+* **Focused Hypothesis Testing**: Instead of a single omnibus model, hypotheses were tested using a series of planned contrasts to directly assess the theoretically-driven predictions, such as the effect of age within each income group.
+* **Composite Score Analysis**: A composite z-score was created by standardizing and averaging measures from two distinct behavioral tasks. This provides a single, robust estimate of the underlying construct for final correlational and regression analyses.
 
 ---
 
