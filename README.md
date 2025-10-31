@@ -11,7 +11,7 @@ The data for this study are publicly available on the Open Science Framework at:
 
 ## Project Objective
 
-The goal of this project is to investigate how age moderates the relationship between socioeconomic status and intertemporal decision-making. We test the **"buffering hypothesis,"** which predicts that the effect of income on choice behavior is attenuated in older adults.
+The goal of this project is to investigate how age moderates the relation between socioeconomic status and intertemporal decision-making. We test the **"buffering hypothesis,"** which predicts that the effect of income on choice behavior is attenuated in older adults.
 
 The analysis employs a series of focused Bayesian hierarchical models to provide a robust and nuanced test of this interaction, demonstrating a complete and reproducible workflow from data processing to statistical inference and reporting.
 
@@ -22,7 +22,7 @@ The analysis employs a series of focused Bayesian hierarchical models to provide
 | **`/Analysis/`** | Contains the primary scripts that replicate all findings in the paper. |
 | `analysis.qmd` | A Quarto document with the complete **R** workflow, using `brms` for Bayesian modeling. |
 | `analysis.ipynb` | A Jupyter Notebook providing a **Python** translation of the analysis, using `pymc` for modeling. |
-| **`/Presentation/`** | A slide deck used to present the research findings at an academic conference. |
+| **`/Presentation/`** | Contains the poster that was presented at DACC. |
 | **`/Figure/`** | All figures as they appear in the final publication. |
 
 ---

@@ -37,9 +37,6 @@ The analysis is structured in five sequential stages:
 5.  **Composite Score Analysis**: Create a composite z-score combining both behavioral measures to verify the primary interaction effect and quantify the magnitude of the age difference in the low-income cohort.
 
 ```{r setup_and_process}
-# Set global chunk options to suppress messages and warnings for a clean output
-knitr::opts_chunk$set(message = FALSE, warning = FALSE, error = FALSE)
-
 # --- 1. SETUP: ENVIRONMENT AND HELPER FUNCTIONS ---
 
 # This section prepares the R environment for the analysis. It loads all 
@@ -254,8 +251,8 @@ demographics_data <- distinct(raw_adj_amt_data, ID, Group, Age, Gender, Educatio
     # Create binary predictor variables for the regression models.
     # 0 = reference group.
     age_group = ifelse(Group %in% c(1, 2), 0, 1),      # 0=Younger, 1=Older
-    income_group = ifelse(Group %in% c(1, 3), 0, 1),    # 0=Lower, 1=Higher
-    education_group = ifelse(Education <= 3, 0, 1), # 0=Below College, 1=College+
+    income_group = ifelse(Group %in% c(1, 3), 0, 1),   # 0=Lower, 1=Higher
+    education_group = ifelse(Education <= 3, 0, 1),    # 0=Below College, 1=College+
     # Convert HADS score from character to numeric, coercing "NA" strings to NA
     hads_score = as.numeric(HADS)
   )
@@ -360,7 +357,7 @@ composite_score_data <- bind_cols(
 
 Before testing the primary hypotheses, this section replicates the initial analyses from the paper that establish the quality and internal consistency of the behavioral data. These checks confirm two key points:
 
-1.  **Validity**: At the group level, the data conforms well to established mathematical models of discounting (logistic growth for MCQ data, hyperboloid for Adj-Amt data), as indicated by high $R^2$ values. This confirms that participants' choices were systematic and not random.
+1.  **Validity**: At the group level, the data conforms well to established mathematical models of discounting (logistic growth for MCQ data, hyperboloid for Adj-Amt data), as indicated by high $R^2$ values. This confirms that participants' choices were systematic.
 2.  **Reliability**: At the individual level, participants' discounting behavior is consistent across different reward amounts within the same task. The high positive correlations demonstrate that individuals who discounted small rewards steeply also tended to discount large rewards steeply.
 
 ```{r quality_checks}
@@ -664,7 +661,7 @@ The final analyses use the composite z-score—a single, robust measure that com
 
 First, we replicate the focused correlation tests from the paper. As predicted, we expect to find a significant positive correlation between age and financial patience (higher z-score) **only in the low-income group**. Conversely, we expect a significant positive correlation between income and financial patience **only in the younger group**.
 
-Second, we quantify the magnitude of these effects using linear regression. This moves beyond statistical significance to understand the practical size of the age effect among low-income individuals, corresponding to the final analyses in the publication's "Discussion" section.
+Second, we quantify the magnitude of these effects using linear regression. This moves beyond statistical significance to understand the practical size of the age effect among low-income individuals, corresponding to the final analyses in the publication's "Results" section.
 
 ```{r zscore_correlations}
 # --- 6.1 Focused Correlation Tests with Composite Score ---
